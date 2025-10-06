@@ -1,0 +1,5 @@
+{
+  "name": "Klondike Solitaire",
+  "description": "A classic Klondike Solitaire card game built with React and TypeScript. All card graphics are rendered using SVGs, providing a clean and scalable interface. Drag and drop cards to solve the puzzle.",
+  "requestFramePermissions": []
+}
