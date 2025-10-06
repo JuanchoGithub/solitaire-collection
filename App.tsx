@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { CardType, DragInfo, GameState } from './types';
 import { Suit, Rank } from './types';
@@ -15,10 +16,20 @@ type AnimationState = {
   toRect: DOMRect;
   destinationType: 'tableau' | 'foundation';
   destinationIndex: number;
-  source: 'tableau' | 'waste';
+  source: 'tableau' | 'waste' | 'foundation';
   sourcePileIndex: number;
   sourceCardIndex: number;
 } | null;
+
+type StockAnimationData = {
+    type: 'turn';
+    cards: CardType[];
+    wasteCountBefore: number;
+} | {
+    type: 'reset';
+    cards: CardType[];
+} | null;
+
 
 type DragGhostState = {
     cards: CardType[];
@@ -38,6 +49,8 @@ type InteractionState = {
     element: HTMLDivElement;
 } | null;
 
+type HintState = { type: 'card'; cardId: number } | { type: 'stock' } | null;
+
 
 const App: React.FC = () => {
     // Core Game State
@@ -55,27 +68,36 @@ const App: React.FC = () => {
     const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
     const [shakeCardId, setShakeCardId] = useState<number | null>(null);
     const [pressedStack, setPressedStack] = useState<{ source: 'tableau' | 'waste' | 'foundation', sourcePileIndex: number, sourceCardIndex: number } | null>(null);
+    const [hint, setHint] = useState<HintState>(null);
 
     // Gameplay Stats & Settings
     const [moves, setMoves] = useState(0);
     const [time, setTime] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
     const [turnMode, setTurnMode] = useState<1 | 3>(3);
+    const [autoplayMode, setAutoplayMode] = useState<'off' | 'obvious' | 'won'>('off');
 
     // Responsive Sizing
     const [cardSize, setCardSize] = useState({ width: 100, height: 140, faceUpStackOffset: 28, faceDownStackOffset: 12 });
     const mainContainerRef = useRef<HTMLElement>(null);
 
     // Animation state
+    const [isDealing, setIsDealing] = useState(true);
+    const [dealAnimationCards, setDealAnimationCards] = useState<{ card: CardType; style: React.CSSProperties; key: number }[]>([]);
+    const [shuffleClass, setShuffleClass] = useState('');
     const [animationData, setAnimationData] = useState<AnimationState>(null);
+    const [stockAnimationData, setStockAnimationData] = useState<StockAnimationData>(null);
     const [isAnimating, setIsAnimating] = useState(false);
-    const [hiddenForAnimation, setHiddenForAnimation] = useState<CardType | null>(null);
+    const [hiddenCardIds, setHiddenCardIds] = useState<number[]>([]);
     const animationEndHandled = useRef(false);
+    const hintTimeoutRef = useRef<number | null>(null);
 
     // Refs for positions
     const foundationRefs = useRef<(HTMLDivElement | null)[]>([]);
     const tableauRefs = useRef<(HTMLDivElement | null)[]>([]);
     const wasteRef = useRef<HTMLDivElement | null>(null);
+    const stockRef = useRef<HTMLDivElement | null>(null);
+    const initialDeckRef = useRef<HTMLDivElement | null>(null);
 
     const updateCardSize = useCallback(() => {
         if (!mainContainerRef.current) return;
@@ -108,52 +130,125 @@ const App: React.FC = () => {
 
 
     const initializeGame = useCallback(() => {
-        let cardId = 0;
-        const fullDeck = SUITS.flatMap(suit => 
-            RANKS.map(rank => ({ 
-                id: cardId++, 
-                suit, 
-                rank, 
-                faceUp: false 
-            }))
-        );
-
-        for (let i = fullDeck.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [fullDeck[i], fullDeck[j]] = [fullDeck[j], fullDeck[i]];
-        }
-
-        const newTableau: CardType[][] = Array.from({ length: 7 }, (_, i) => fullDeck.splice(0, i + 1));
-        
-        newTableau.forEach((pile, pileIndex) => {
-            if (pile.length > 0) {
-                const lastCardIndex = pile.length - 1;
-                newTableau[pileIndex][lastCardIndex] = { ...pile[lastCardIndex], faceUp: true };
-            }
-        });
-
-        setTableau(newTableau);
-        setStock(fullDeck);
-        setWaste([]);
-        setFoundations([[], [], [], []]);
         setIsWon(false);
         setDragSourceInfo(null);
         setDragGhost(null);
         setInteractionState(null);
         setIsRulesModalOpen(false);
         setAnimationData(null);
+        setStockAnimationData(null);
         setIsAnimating(false);
-        setHiddenForAnimation(null);
+        setHiddenCardIds([]);
         setPressedStack(null);
+        setHint(null);
         setMoves(0);
         setTime(0);
         setHistory([]);
         setIsPaused(false);
+
+        // Reset game state for new deal
+        setTableau(Array.from({ length: 7 }, () => []));
+        setStock([]);
+        setWaste([]);
+        setFoundations([[], [], [], []]);
+        setDealAnimationCards([]);
+        setShuffleClass('');
+
+        // Start dealing animation
+        setIsDealing(true);
     }, []);
 
     useEffect(() => {
         initializeGame();
     }, [initializeGame]);
+
+    useEffect(() => {
+        if (isDealing && mainContainerRef.current && stockRef.current && tableauRefs.current.every(ref => ref) && initialDeckRef.current) {
+            // 1. Create and shuffle deck
+            let cardId = 0;
+            const fullDeck = SUITS.flatMap(suit => RANKS.map(rank => ({ id: cardId++, suit, rank, faceUp: false })));
+            for (let i = fullDeck.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [fullDeck[i], fullDeck[j]] = [fullDeck[j], fullDeck[i]];
+            }
+            const deckForState = [...fullDeck];
+
+            // 2. Shuffle Animation
+            setShuffleClass('perform-shuffle');
+            
+            const dealStartTime = 1200; // after shuffle animation (1.2s)
+            
+            // 3. Prepare dealing animation data
+            const flyingCards: typeof dealAnimationCards = [];
+            let dealDelay = 0;
+            const dealStagger = 40;
+
+            const fromRect = initialDeckRef.current.getBoundingClientRect();
+            if (!fromRect) return;
+
+            const finalTableau: CardType[][] = Array.from({ length: 7 }, (_, i) => deckForState.splice(0, i + 1));
+            const finalStock = deckForState;
+
+            finalTableau.forEach((pile, pileIndex) => {
+                pile.forEach((card, cardIndex) => {
+                    const isLastCardInPile = cardIndex === pile.length - 1;
+                    const animatedCard = { ...card, faceUp: isLastCardInPile };
+                    
+                    const toEl = tableauRefs.current[pileIndex];
+                    if (toEl) {
+                        const toRect = toEl.getBoundingClientRect();
+                        const topOffset = cardIndex * cardSize.faceDownStackOffset;
+                        flyingCards.push({
+                            card: animatedCard,
+                            key: card.id,
+                            style: {
+                                '--from-top': `${fromRect.top}px`,
+                                '--from-left': `${fromRect.left}px`,
+                                '--to-top': `${toRect.top + topOffset}px`,
+                                '--to-left': `${toRect.left}px`,
+                                animationDelay: `${dealStartTime + dealDelay}ms`,
+                            } as React.CSSProperties
+                        });
+                        dealDelay += dealStagger;
+                    }
+                });
+            });
+
+            const toStockRect = stockRef.current.getBoundingClientRect();
+            finalStock.forEach(card => {
+                flyingCards.push({
+                    card,
+                    key: card.id,
+                    style: {
+                        '--from-top': `${fromRect.top}px`,
+                        '--from-left': `${fromRect.left}px`,
+                        '--to-top': `${toStockRect.top}px`,
+                        '--to-left': `${toStockRect.left}px`,
+                        animationDelay: `${dealStartTime + dealDelay}ms`,
+                    } as React.CSSProperties
+                });
+                dealDelay += dealStagger / 5;
+            });
+
+            setDealAnimationCards(flyingCards);
+
+            // 4. Finalize game state after animation
+            setTimeout(() => {
+                finalTableau.forEach(pile => {
+                    if (pile.length > 0) {
+                        pile[pile.length - 1].faceUp = true;
+                    }
+                });
+                setTableau(finalTableau);
+                setStock(finalStock);
+                setIsDealing(false);
+                setDealAnimationCards([]);
+                setShuffleClass('');
+                setTime(0);
+            }, dealStartTime + dealDelay + 500); // 500ms is anim duration
+        }
+    }, [isDealing, cardSize.width]);
+
 
     useEffect(() => {
         if (foundations.flat().length === 52) {
@@ -162,7 +257,7 @@ const App: React.FC = () => {
     }, [foundations]);
 
     useEffect(() => {
-        if (isPaused || isWon || isAnimating) {
+        if (isPaused || isWon || isAnimating || isDealing || stockAnimationData) {
             return;
         }
         const timerId = setInterval(() => {
@@ -170,7 +265,81 @@ const App: React.FC = () => {
         }, 1000);
 
         return () => clearInterval(timerId);
-    }, [isPaused, isWon, isAnimating]);
+    }, [isPaused, isWon, isAnimating, isDealing, stockAnimationData]);
+
+    // Autoplay Logic
+    useEffect(() => {
+        if (autoplayMode === 'off' || isPaused || isAnimating || isDealing || interactionState || isWon || stockAnimationData) {
+            return;
+        }
+
+        const executeAutoMove = (card: CardType, source: 'waste' | 'tableau' | 'foundation', sourcePileIndex: number, sourceCardIndex: number, destinationType: 'foundation' | 'tableau', destinationIndex: number) => {
+            const fromEl = document.querySelector(`[data-card-id="${card.id}"]`);
+            if (!fromEl) return false;
+
+            let toEl;
+            let toRect;
+
+            if (destinationType === 'foundation') {
+                toEl = foundationRefs.current[destinationIndex];
+                if (toEl) toRect = toEl.getBoundingClientRect();
+            } else {
+                return false; // Not implemented for non-foundation moves
+            }
+            
+            if (fromEl && toRect) {
+                animationEndHandled.current = false;
+                setHiddenCardIds([card.id]);
+                setAnimationData({ card, fromRect: fromEl.getBoundingClientRect(), toRect, destinationType, destinationIndex, source, sourcePileIndex, sourceCardIndex });
+                setTimeout(() => setIsAnimating(true), 10);
+                return true; // Move initiated
+            }
+            return false;
+        };
+
+        const findAndExecuteFoundationMove = (): boolean => {
+            // Check waste card first
+            const topWasteCard = waste[0];
+            if (topWasteCard) {
+                const foundationIndex = SUITS.indexOf(topWasteCard.suit);
+                const targetPile = foundations[foundationIndex];
+                const topCard = targetPile[targetPile.length - 1];
+                if ((!topCard && topWasteCard.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[topWasteCard.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
+                    if (executeAutoMove(topWasteCard, 'waste', 0, 0, 'foundation', foundationIndex)) {
+                        return true;
+                    }
+                }
+            }
+
+            // Check tableau cards
+            for (let i = 0; i < tableau.length; i++) {
+                const pile = tableau[i];
+                const topTableauCard = pile[pile.length - 1];
+                if (topTableauCard?.faceUp) {
+                    const foundationIndex = SUITS.indexOf(topTableauCard.suit);
+                    const targetPile = foundations[foundationIndex];
+                    const topCard = targetPile[targetPile.length - 1];
+                    if ((!topCard && topTableauCard.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[topTableauCard.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
+                        if (executeAutoMove(topTableauCard, 'tableau', i, pile.length - 1, 'foundation', foundationIndex)) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        };
+        
+        const isGameWinnable = stock.length === 0 && tableau.flat().every(c => c.faceUp);
+
+        if (autoplayMode === 'obvious') {
+            const timeoutId = setTimeout(findAndExecuteFoundationMove, 500);
+            return () => clearTimeout(timeoutId);
+        } else if (autoplayMode === 'won' && isGameWinnable) {
+            const timeoutId = setTimeout(findAndExecuteFoundationMove, 200);
+            return () => clearTimeout(timeoutId);
+        }
+
+    }, [autoplayMode, tableau, waste, foundations, stock, isPaused, isAnimating, isDealing, interactionState, isWon, cardSize, stockAnimationData]);
 
     const saveStateToHistory = () => {
         setHistory(prev => [...prev, { stock, waste, foundations, tableau, moves }]);
@@ -191,24 +360,144 @@ const App: React.FC = () => {
         setTurnMode(prev => (prev === 1 ? 3 : 1));
     };
 
+    const handleAutoplayModeToggle = () => {
+        setAutoplayMode(prev => {
+            if (prev === 'off') return 'obvious';
+            if (prev === 'obvious') return 'won';
+            return 'off';
+        });
+    };
+
     const handleStockClick = () => {
-        if (isAnimating || isPaused) return;
+        if (isAnimating || isPaused || isDealing || stockAnimationData) return;
         if (stock.length === 0 && waste.length === 0) return;
+        setHint(null);
 
         saveStateToHistory();
         setMoves(prev => prev + 1);
 
         if (stock.length > 0) {
             const cardsToDraw = Math.min(stock.length, turnMode);
-            const drawnCards = stock.slice(-cardsToDraw).map(c => ({ ...c, faceUp: true })).reverse();
-            setWaste(prevWaste => [...drawnCards, ...prevWaste]);
-            setStock(prevStock => prevStock.slice(0, prevStock.length - cardsToDraw));
+            const drawnCards = stock.slice(-cardsToDraw);
+            const turnedCards = drawnCards.map(c => ({...c, faceUp: true})).reverse();
+
+            // Hide cards in waste pile while they animate
+            setHiddenCardIds(turnedCards.map(c => c.id));
+
+            // Update state immediately
+            setStock(prev => prev.slice(0, prev.length - cardsToDraw));
+            setWaste(prev => [...turnedCards, ...prev]);
+
+            // Set animation data. The cards are still face-down in `drawnCards`.
+            setStockAnimationData({ type: 'turn', cards: drawnCards, wasteCountBefore: waste.length });
+            
+            // After animation, unhide cards.
+            setTimeout(() => {
+                setStockAnimationData(null);
+                setHiddenCardIds([]);
+            }, 500 + (drawnCards.length - 1) * 75); // animation duration + total delay
+        
         } else {
-            const newStock = [...waste].reverse().map(c => ({ ...c, faceUp: false }));
-            setStock(newStock);
-            setWaste([]);
+            const cardsToReset = [...waste];
+            if (cardsToReset.length === 0) return;
+            setWaste([]); // Clear waste immediately
+            setStockAnimationData({ type: 'reset', cards: cardsToReset });
+
+            setTimeout(() => {
+                // This ensures the same sequence of cards is available on each pass.
+                const newStock = cardsToReset.reverse().map(c => ({...c, faceUp: false}));
+                setStock(newStock);
+                setStockAnimationData(null);
+            }, 500 + (cardsToReset.length - 1) * 20); // smaller delay for faster reset animation
         }
     };
+
+    const handleHint = useCallback(() => {
+        if (hintTimeoutRef.current) {
+            clearTimeout(hintTimeoutRef.current);
+        }
+
+        const findHint = (): HintState => {
+            // Priority 1: Move card to foundation
+            const topWasteCard = waste[0];
+            if (topWasteCard) {
+                const foundationIndex = SUITS.indexOf(topWasteCard.suit);
+                const targetPile = foundations[foundationIndex];
+                const topCard = targetPile[targetPile.length - 1];
+                if ((!topCard && topWasteCard.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[topWasteCard.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
+                    return { type: 'card', cardId: topWasteCard.id };
+                }
+            }
+            for (const pile of tableau) {
+                const topTableauCard = pile[pile.length - 1];
+                if (topTableauCard?.faceUp) {
+                    const foundationIndex = SUITS.indexOf(topTableauCard.suit);
+                    const targetPile = foundations[foundationIndex];
+                    const topCard = targetPile[targetPile.length - 1];
+                    if ((!topCard && topTableauCard.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[topTableauCard.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
+                        return { type: 'card', cardId: topTableauCard.id };
+                    }
+                }
+            }
+
+            // Priority 2: Uncover a face-down card in the tableau
+            for (const sourcePile of tableau) {
+                const firstFaceUpIndex = sourcePile.findIndex(c => c.faceUp);
+                if (firstFaceUpIndex > 0) { // This means there's a face-down card under a face-up one
+                    for (let i = firstFaceUpIndex; i < sourcePile.length; i++) {
+                        const cardToMove = sourcePile[i];
+                        for (const destPile of tableau) {
+                            if (sourcePile === destPile) continue;
+                            const topDestCard = destPile[destPile.length - 1];
+                            if ((!topDestCard && cardToMove.rank === Rank.KING) || (topDestCard?.faceUp && SUIT_COLOR_MAP[cardToMove.suit] !== SUIT_COLOR_MAP[topDestCard.suit] && RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1)) {
+                                return { type: 'card', cardId: cardToMove.id };
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Priority 3: Move card from waste to tableau
+            if (topWasteCard) {
+                 for (const pile of tableau) {
+                    const topCard = pile[pile.length - 1];
+                    if ((!topCard && topWasteCard.rank === Rank.KING) || (topCard?.faceUp && SUIT_COLOR_MAP[topWasteCard.suit] !== SUIT_COLOR_MAP[topCard.suit] && RANK_VALUE_MAP[topWasteCard.rank] === RANK_VALUE_MAP[topCard.rank] - 1)) {
+                         return { type: 'card', cardId: topWasteCard.id };
+                    }
+                }
+            }
+            
+            // Priority 4: Any other valid tableau move
+             for (const sourcePile of tableau) {
+                const firstFaceUpIndex = sourcePile.findIndex(c => c.faceUp);
+                 if (firstFaceUpIndex !== -1) {
+                    for (let i = firstFaceUpIndex; i < sourcePile.length; i++) {
+                        const cardToMove = sourcePile[i];
+                        for (const destPile of tableau) {
+                            if (sourcePile === destPile) continue;
+                            const topDestCard = destPile[destPile.length - 1];
+                             if ((!topDestCard && cardToMove.rank === Rank.KING) || (topDestCard?.faceUp && SUIT_COLOR_MAP[cardToMove.suit] !== SUIT_COLOR_MAP[topDestCard.suit] && RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1)) {
+                                return { type: 'card', cardId: cardToMove.id };
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Priority 5: Turn stock
+            if (stock.length > 0 || waste.length > 0) {
+                return { type: 'stock' };
+            }
+
+            return null; // No moves found
+        };
+
+        const foundHint = findHint();
+        setHint(foundHint);
+        if (foundHint) {
+            hintTimeoutRef.current = window.setTimeout(() => setHint(null), 3000);
+        }
+    }, [stock, waste, tableau, foundations]);
     
     // Custom Click and Drag Logic
     const handleMouseDown = (
@@ -218,12 +507,13 @@ const App: React.FC = () => {
         sourcePileIndex: number,
         sourceCardIndex: number
     ) => {
-        if (isAnimating || isPaused || e.button !== 0 || (cards.length > 0 && !cards[0].faceUp)) return;
+        if (isAnimating || isPaused || e.button !== 0 || (cards.length > 0 && !cards[0].faceUp) || isDealing || stockAnimationData) return;
         e.preventDefault();
 
         if (cards.length > 0) {
             setPressedStack({ source, sourcePileIndex, sourceCardIndex });
         }
+        setHint(null);
 
         setInteractionState({
             startX: e.clientX,
@@ -389,7 +679,7 @@ const App: React.FC = () => {
                             const toRect = foundationRefs.current[i]?.getBoundingClientRect();
                             if (toRect) {
                                 animationEndHandled.current = false;
-                                setHiddenForAnimation(card);
+                                setHiddenCardIds([card.id]);
                                 setAnimationData({ card, fromRect: element.getBoundingClientRect(), toRect, destinationType: 'foundation', destinationIndex: i, source, sourcePileIndex, sourceCardIndex });
                                 setTimeout(() => setIsAnimating(true), 10);
                                 setInteractionState(null);
@@ -421,7 +711,7 @@ const App: React.FC = () => {
                                 const toRect = new DOMRect(parentRect.x, parentRect.y + topOffset, parentRect.width, parentRect.height);
 
                                 animationEndHandled.current = false;
-                                setHiddenForAnimation(card);
+                                setHiddenCardIds([card.id]);
                                 setAnimationData({ card, fromRect: element.getBoundingClientRect(), toRect, destinationType: 'tableau', destinationIndex: i, source, sourcePileIndex, sourceCardIndex });
                                 setTimeout(() => setIsAnimating(true), 10);
                                 setInteractionState(null);
@@ -497,7 +787,7 @@ const App: React.FC = () => {
 
         setAnimationData(null);
         setIsAnimating(false);
-        setHiddenForAnimation(null);
+        setHiddenCardIds([]);
     };
 
     const formatTime = (totalSeconds: number) => {
@@ -510,10 +800,109 @@ const App: React.FC = () => {
 
 
     return (
-        <div className="bg-green-800 min-h-screen text-white p-4 font-sans overflow-x-hidden relative flex flex-col">
+        <div className={`bg-green-800 min-h-screen text-white p-4 font-sans overflow-x-hidden relative flex flex-col ${shuffleClass}`}>
              {isWon && <WinModal onPlayAgain={initializeGame} />}
              {isRulesModalOpen && <RulesModal onClose={() => setIsRulesModalOpen(false)} />}
              {isPaused && <PauseModal onResume={() => setIsPaused(false)} />}
+
+             {dealAnimationCards.map(({ card, key, style }) => (
+                <div key={key} className="deal-card" style={style}>
+                    <Card card={card} width={cardSize.width} height={cardSize.height} />
+                </div>
+             ))}
+
+             {isDealing && (
+                <div 
+                    ref={initialDeckRef}
+                    className="initial-deck-visual"
+                    style={{ 
+                        position: 'fixed',
+                        width: cardSize.width, 
+                        height: cardSize.height,
+                        bottom: '2rem', 
+                        left: '50%',
+                        transform: 'translateX(-50%)'
+                    }}
+                >
+                    <Card card={{ id: -1, suit: Suit.SPADES, rank: Rank.ACE, faceUp: false }} width={cardSize.width} height={cardSize.height} />
+                </div>
+            )}
+            
+            {stockAnimationData?.type === 'turn' && stockAnimationData.cards.map((card, i) => {
+                const fromRect = stockRef.current?.getBoundingClientRect();
+                const toRect = wasteRef.current?.getBoundingClientRect();
+                if (!fromRect || !toRect) return null;
+
+                const drawnCardsCount = stockAnimationData.cards.length;
+                // This is the index from last-drawn (0) to first-drawn (drawnCardsCount - 1)
+                const cardDrawIndex = drawnCardsCount - 1 - i; 
+
+                const wasteCountAfter = stockAnimationData.wasteCountBefore + drawnCardsCount;
+                const visibleWasteCount = Math.min(3, wasteCountAfter);
+
+                // The card's final position in the visible stack (0 is bottom-most, visibleWasteCount-1 is top-most)
+                const finalVisibleIndex = visibleWasteCount - 1 - cardDrawIndex;
+
+                const offset = finalVisibleIndex >= 0 ? finalVisibleIndex * 12 : 0;
+                
+                const translateX = toRect.left + offset - fromRect.left;
+                const translateY = toRect.top - fromRect.top;
+
+                return (
+                    <div key={card.id} className="stock-turn-card" style={{
+                        top: `${fromRect.top}px`,
+                        left: `${fromRect.left}px`,
+                        '--translateX': `${translateX}px`,
+                        '--translateY': `${translateY}px`,
+                        '--delay': `${i * 75}ms`,
+                         width: cardSize.width, height: cardSize.height,
+                    } as React.CSSProperties}>
+                        <div className="card-flipper">
+                            <div className="flipper-back">
+                                <Card card={card} width={cardSize.width} height={cardSize.height} />
+                            </div>
+                            <div className="flipper-front">
+                                <Card card={{...card, faceUp: true}} width={cardSize.width} height={cardSize.height} />
+                            </div>
+                        </div>
+                    </div>
+                );
+            })}
+
+            {stockAnimationData?.type === 'reset' && stockAnimationData.cards.map((card, i) => {
+                const fromRect = wasteRef.current?.getBoundingClientRect();
+                const toRect = stockRef.current?.getBoundingClientRect();
+                if (!fromRect || !toRect) return null;
+
+                const numWasteCards = stockAnimationData.cards.length;
+                const cardIndexInWaste = numWasteCards - 1 - i;
+                const stackIndex = Math.min(2, cardIndexInWaste);
+                const offset = stackIndex * 12;
+
+                const translateX = toRect.left - (fromRect.left + offset);
+                const translateY = toRect.top - fromRect.top;
+
+                return (
+                    <div key={card.id} className="waste-reset-card" style={{
+                        top: `${fromRect.top}px`,
+                        left: `${fromRect.left + offset}px`,
+                        '--translateX': `${translateX}px`,
+                        '--translateY': `${translateY}px`,
+                        '--delay': `${(numWasteCards - 1 - i) * 20}ms`,
+                         width: cardSize.width, height: cardSize.height,
+                    } as React.CSSProperties}>
+                        <div className="card-flipper">
+                             <div className="flipper-back">
+                                <Card card={{...card, faceUp: false}} width={cardSize.width} height={cardSize.height} />
+                            </div>
+                            <div className="flipper-front">
+                                <Card card={card} width={cardSize.width} height={cardSize.height} />
+                            </div>
+                        </div>
+                    </div>
+                );
+            })}
+
 
              {animationData && (
                  <div
@@ -563,7 +952,7 @@ const App: React.FC = () => {
             )}
 
             <div className="max-w-7xl mx-auto w-full">
-                <header className="flex flex-wrap justify-between items-center gap-4 mb-4">
+                <header className={`flex flex-wrap justify-between items-center gap-4 mb-4 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
                     <h1 className="text-3xl sm:text-4xl font-bold tracking-wider">Klondike</h1>
 
                     <div className="flex-grow flex justify-center items-center flex-wrap gap-x-6 gap-y-2">
@@ -591,7 +980,7 @@ const App: React.FC = () => {
                 <main ref={mainContainerRef} className="pt-4 flex-grow">
                     <div className="flex flex-wrap justify-between gap-4 mb-8">
                         <div className="flex gap-4">
-                            <div onClick={handleStockClick} className="cursor-pointer">
+                            <div ref={stockRef} onClick={handleStockClick} className={`cursor-pointer ${hint?.type === 'stock' ? 'stock-hint' : ''}`}>
                                 {stock.length > 0 ? <Card card={stock[stock.length - 1]} width={cardSize.width} height={cardSize.height} /> : <EmptyPile width={cardSize.width} height={cardSize.height}>
                                     <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5V4H4zm0 12v5h5v-5H4zM15 4v5h5V4h-5zm0 12v5h5v-5h-5z" /></svg>
                                 </EmptyPile>}
@@ -603,7 +992,7 @@ const App: React.FC = () => {
                                     const isTopCard = i === 0;
                                     const offset = (Math.min(2, waste.length-1) - i) * 12;
 
-                                    return (hiddenForAnimation?.id !== card.id && (
+                                    return (!hiddenCardIds.includes(card.id) && (
                                         <div key={card.id} className="absolute top-0" style={{left: `${offset}px`}}>
                                             <Card 
                                                 card={card} 
@@ -612,6 +1001,7 @@ const App: React.FC = () => {
                                                 height={cardSize.height}
                                                 isDragging={isTopCard && dragSourceInfo?.source === 'waste'}
                                                 isPressed={isTopCard && pressedStack?.source === 'waste'}
+                                                isHinted={hint?.type === 'card' && hint.cardId === card.id}
                                             />
                                         </div>
                                     ));
@@ -623,6 +1013,7 @@ const App: React.FC = () => {
                             {foundations.map((pile, i) => {
                                 const isTopCardDragging = dragSourceInfo?.source === 'foundation' && dragSourceInfo.sourcePileIndex === i;
                                 const isTopCardPressed = !!pressedStack && pressedStack.source === 'foundation' && pressedStack.sourcePileIndex === i;
+                                const topCard = pile[pile.length - 1];
                                 return (
                                     <div key={i} ref={el => { foundationRefs.current[i] = el; }} className="relative" style={{ width: cardSize.width, height: cardSize.height }}>
                                         {/* Background rendering */}
@@ -641,12 +1032,13 @@ const App: React.FC = () => {
                                         {pile.length > 0 && 
                                             <div className="absolute top-0 left-0">
                                                 <Card 
-                                                    card={pile[pile.length - 1]} 
-                                                    onMouseDown={(e) => handleMouseDown(e, [pile[pile.length - 1]], 'foundation', i, pile.length - 1)} 
+                                                    card={topCard} 
+                                                    onMouseDown={(e) => handleMouseDown(e, [topCard], 'foundation', i, pile.length - 1)} 
                                                     width={cardSize.width} 
                                                     height={cardSize.height}
                                                     isDragging={isTopCardDragging}
                                                     isPressed={isTopCardPressed}
+                                                    isHinted={hint?.type === 'card' && hint.cardId === topCard.id}
                                                 />
                                             </div>
                                         }
@@ -682,7 +1074,7 @@ const App: React.FC = () => {
                                                 pressedStack.sourcePileIndex === pileIndex &&
                                                 cardIndex >= pressedStack.sourceCardIndex;
                                             
-                                            return (hiddenForAnimation?.id === card.id) ?
+                                            return (hiddenCardIds.includes(card.id)) ?
                                             <div key={card.id} style={{ position: 'absolute', top: `${cardTops[cardIndex]}px`, left: 0, width: cardSize.width, height: cardSize.height }} /> :
                                             <Card
                                                 key={card.id}
@@ -693,6 +1085,7 @@ const App: React.FC = () => {
                                                 isDragging={isCardDragging}
                                                 isShaking={shakeCardId === card.id}
                                                 isPressed={isCardPressed}
+                                                isHinted={hint?.type === 'card' && hint.cardId === card.id}
                                             />
                                         })
                                     }
@@ -703,11 +1096,56 @@ const App: React.FC = () => {
                     </div>
                 </main>
             </div>
-             <footer className="w-full flex justify-center items-center gap-4 mt-auto pt-4">
+             <footer className={`w-full flex justify-center items-center gap-4 mt-auto pt-4 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
+                <button onClick={initializeGame} className={buttonClasses.replace('bg-green-700 hover:bg-green-600', 'bg-blue-600 hover:bg-blue-500')}>New Game</button>
+                <button onClick={handleHint} disabled={isAnimating || isDealing || isPaused || !!stockAnimationData} className={buttonClasses}>Hint</button>
                 <button onClick={() => setIsRulesModalOpen(true)} className={buttonClasses}>Rules</button>
-                <button onClick={initializeGame} className={buttonClasses.replace('bg-green-700 hover:bg-green-600', 'bg-green-600 hover:bg-green-50al')}>New Game</button>
+                <div className="relative group">
+                    <button onClick={handleAutoplayModeToggle} className={buttonClasses}>
+                        Autoplay: <span className="capitalize">{autoplayMode}</span>
+                    </button>
+                    <div className="absolute bottom-full mb-2 w-60 bg-black/80 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-center left-1/2 -translate-x-1/2 z-20">
+                        { autoplayMode === 'off' && 'Off: No automatic moves.' }
+                        { autoplayMode === 'obvious' && 'Obvious: Automatically moves cards to the foundations.' }
+                        { autoplayMode === 'won' && 'Won: Finishes the game automatically when all cards are face up.' }
+                    </div>
+                </div>
             </footer>
             <style>{`
+                @keyframes deal-card-fly {
+                    from {
+                        top: var(--from-top);
+                        left: var(--from-left);
+                        transform: rotate(0deg) scale(1);
+                        opacity: 1;
+                    }
+                    to {
+                        top: var(--to-top);
+                        left: var(--to-left);
+                        transform: rotate(360deg) scale(1);
+                        opacity: 1;
+                    }
+                }
+                .deal-card {
+                    position: fixed;
+                    z-index: 200;
+                    opacity: 0;
+                    animation: deal-card-fly 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+                }
+
+                @keyframes shuffle-and-fade {
+                    0%   { transform: translateX(-50%) scale(1) rotate(0deg); opacity: 1; }
+                    17%  { transform: translateX(-50%) scale(1.05) translateY(-20px) rotate(0deg); }
+                    33%  { transform: translateX(-75%) scale(1.05) translateY(-20px) rotate(-10deg); }
+                    50%  { transform: translateX(-25%) scale(1.05) translateY(-20px) rotate(10deg); }
+                    67%  { transform: translateX(-50%) scale(1.05) translateY(-20px) rotate(0deg); }
+                    83%  { transform: translateX(-50%) scale(1) rotate(0deg); opacity: 1; }
+                    100% { transform: translateX(-50%) scale(1) rotate(0deg); opacity: 0; }
+                }
+                .perform-shuffle .initial-deck-visual {
+                    animation: shuffle-and-fade 1.2s ease-in-out forwards;
+                }
+                
                 @keyframes auto-move {
                     0% { transform: translate(0, 0) scale(1) rotate(0deg); }
                     15% { transform: translate(0, -15px) scale(1.05) rotate(3deg); }
@@ -729,6 +1167,81 @@ const App: React.FC = () => {
                 .card-pressed {
                     transform: translateY(-8px) translateX(4px) rotate(3deg) scale(1.03);
                     box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.2), 0 4px 6px -4px rgb(0 0 0 / 0.2);
+                }
+                @keyframes pulse-gold {
+                    0% { box-shadow: 0 0 8px 3px rgba(255, 215, 0, 0.6); transform: scale(1.0) translateY(0); }
+                    50% { box-shadow: 0 0 16px 6px rgba(255, 215, 0, 0.8); transform: scale(1.08) translateY(-4px); }
+                    100% { box-shadow: 0 0 8px 3px rgba(255, 215, 0, 0.6); transform: scale(1.0) translateY(0); }
+                }
+                .card-hint {
+                    animation: pulse-gold 1.5s infinite ease-in-out;
+                }
+                .stock-hint > div { /* Target the inner card or empty pile */
+                    animation: pulse-gold 1.5s infinite ease-in-out;
+                    border-radius: 0.5rem; /* Ensure shadow follows rounded corners */
+                }
+
+                /* Stock/Waste Animation Styles */
+                @keyframes stock-turn-move {
+                    from {
+                        transform: translate(0, 0) rotate(5deg) scale(1.05);
+                        z-index: 201;
+                    }
+                    to {
+                        transform: translate(var(--translateX), var(--translateY)) rotate(0deg) scale(1);
+                        z-index: 200;
+                    }
+                }
+                @keyframes stock-turn-flip {
+                    from { transform: rotateY(0deg); }
+                    to { transform: rotateY(180deg); }
+                }
+                .stock-turn-card {
+                    position: fixed;
+                    animation: stock-turn-move 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+                    animation-delay: var(--delay);
+                }
+                .stock-turn-card .card-flipper {
+                    animation: stock-turn-flip 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+                    animation-delay: var(--delay);
+                }
+                
+                @keyframes waste-reset-move {
+                    from {
+                        transform: translate(0, 0) rotate(-5deg) scale(1.05);
+                        z-index: 201;
+                    }
+                    to {
+                        transform: translate(var(--translateX), var(--translateY)) rotate(0deg) scale(1);
+                        z-index: 200;
+                    }
+                }
+                @keyframes waste-reset-flip {
+                    from { transform: rotateY(180deg); }
+                    to { transform: rotateY(0deg); }
+                }
+                .waste-reset-card {
+                    position: fixed;
+                    animation: waste-reset-move 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+                    animation-delay: var(--delay);
+                }
+                .waste-reset-card .card-flipper {
+                    animation: waste-reset-flip 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+                    animation-delay: var(--delay);
+                }
+
+                .card-flipper {
+                    width: 100%; height: 100%;
+                    position: relative;
+                    transform-style: preserve-3d;
+                }
+                .flipper-front, .flipper-back {
+                    position: absolute; width: 100%; height: 100%;
+                    -webkit-backface-visibility: hidden;
+                    backface-visibility: hidden;
+                }
+                .flipper-front {
+                    transform: rotateY(180deg);
                 }
             `}</style>
         </div>

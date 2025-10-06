@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { CardType } from '../types';
 import { SUIT_COLOR_MAP, SUIT_SYMBOL_MAP } from '../constants';
@@ -11,6 +12,7 @@ interface CardProps {
   height: number;
   isShaking?: boolean;
   isPressed?: boolean;
+  isHinted?: boolean;
 }
 
 const SuitIcon: React.FC<{ suit: CardType['suit']; className: string }> = ({ suit, className }) => {
@@ -35,14 +37,15 @@ const CardBack: React.FC = () => (
 );
 
 
-const Card: React.FC<CardProps> = ({ card, onMouseDown, style, isDragging, width, height, isShaking, isPressed }) => {
+const Card: React.FC<CardProps> = ({ card, onMouseDown, style, isDragging, width, height, isShaking, isPressed, isHinted }) => {
   const { suit, rank, faceUp } = card;
 
   if (!faceUp) {
     return (
       <div
+        data-card-id={card.id}
         style={{ width: `${width}px`, height: `${height}px`, ...style }}
-        className="rounded-lg shadow-md cursor-pointer"
+        className={`rounded-lg shadow-md cursor-pointer ${isHinted ? 'card-hint' : ''}`}
         onMouseDown={onMouseDown}
       >
         <CardBack />
@@ -55,12 +58,14 @@ const Card: React.FC<CardProps> = ({ card, onMouseDown, style, isDragging, width
   const fontSize = width < 80 ? 'text-lg' : 'text-xl';
   const shakeClass = isShaking ? 'card-shake' : '';
   const pressedClass = isPressed ? 'card-pressed' : '';
+  const hintClass = isHinted ? 'card-hint' : '';
 
   return (
     <div
+      data-card-id={card.id}
       onMouseDown={onMouseDown}
       style={{ width: `${width}px`, height: `${height}px`, ...style }}
-      className={`bg-white rounded-lg shadow-md flex flex-col justify-between relative select-none cursor-grab active:cursor-grabbing ${colorClass} ${visibilityClass} ${shakeClass} ${pressedClass} transition-transform duration-100 ease-out`}
+      className={`bg-white rounded-lg shadow-md flex flex-col justify-between relative select-none cursor-grab active:cursor-grabbing ${colorClass} ${visibilityClass} ${shakeClass} ${pressedClass} ${hintClass} transition-transform duration-100 ease-out`}
     >
       {/* Top Left Rank */}
       <div className="absolute top-1 left-2">
