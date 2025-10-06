@@ -347,10 +347,10 @@ const App: React.FC = () => {
         const isGameWinnable = stock.length === 0 && tableau.flat().every(c => c.faceUp);
 
         if (autoplayMode === 'obvious') {
-            const timeoutId = setTimeout(findAndExecuteFoundationMove, 150);
+            const timeoutId = setTimeout(findAndExecuteFoundationMove, 100);
             return () => clearTimeout(timeoutId);
         } else if (autoplayMode === 'won' && isGameWinnable) {
-            const timeoutId = setTimeout(findAndExecuteFoundationMove, 75);
+            const timeoutId = setTimeout(findAndExecuteFoundationMove, 50);
             return () => clearTimeout(timeoutId);
         }
 
@@ -1206,42 +1206,39 @@ const App: React.FC = () => {
                                         }
                                         {foundationFx?.index === i && (
                                             <div className="absolute inset-0 pointer-events-none z-10">
-                                                {/* Sparkles */}
+                                                {/* Cute Stars */}
                                                 {Array.from({ length: 8 }).map((_, j) => {
                                                     const angle = (j / 8) * 2 * Math.PI;
-                                                    const radius = 60 + Math.random() * 25;
-                                                    const color = SUIT_COLOR_MAP[foundationFx.suit] === 'red' ? '#ef4444' : '#64748b';
+                                                    const radius = 50 + Math.random() * 30;
+                                                    const color = ['#fde047', '#f9a8d4', '#a7f3d0'][j % 3]; // Cute pastel colors
                                                     return (
                                                         <div 
-                                                            key={`sparkle-${j}`} 
-                                                            className="sparkle"
+                                                            key={`star-${j}`} 
+                                                            className="cute-star"
                                                             style={{
                                                                 '--tx': `${Math.cos(angle) * radius}px`,
                                                                 '--ty': `${Math.sin(angle) * radius}px`,
                                                                 '--color': color,
-                                                                'animationDelay': `${Math.random() * 0.15}s`,
+                                                                'animationDelay': `${Math.random() * 0.2}s`,
                                                             } as React.CSSProperties}
                                                         />
                                                     );
                                                 })}
-                                                {/* Suit symbols */}
+                                                {/* Cute Hearts */}
                                                 {Array.from({ length: 5 }).map((_, j) => {
-                                                    const angle = (Math.random() - 0.5) * (Math.PI / 4);
-                                                    const radius = 50 + Math.random() * 40;
-                                                    const color = SUIT_COLOR_MAP[foundationFx.suit] === 'red' ? '#ef4444' : '#1e293b';
+                                                    const angle = (Math.random() - 0.5) * (Math.PI / 2);
+                                                    const radius = 40 + Math.random() * 30;
                                                     return (
                                                         <div
-                                                            key={`suit-${j}`}
-                                                            className="suit-particle"
+                                                            key={`heart-${j}`}
+                                                            className="heart-particle"
                                                             style={{
                                                                 '--tx': `${Math.sin(angle) * radius}px`,
                                                                 '--ty': `${-Math.cos(angle) * radius}px`,
-                                                                '--color': color,
-                                                                '--rotation': `${(Math.random() - 0.5) * 90}deg`,
-                                                                'animationDelay': `${Math.random() * 0.2}s`,
+                                                                'animationDelay': `${Math.random() * 0.25}s`,
                                                             } as React.CSSProperties}
                                                         >
-                                                            {SUIT_SYMBOL_MAP[foundationFx.suit]}
+                                                            ♥
                                                         </div>
                                                     )
                                                 })}
@@ -1313,7 +1310,7 @@ const App: React.FC = () => {
                     <div className="absolute bottom-full mb-2 w-60 bg-black/80 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-center left-1/2 -translate-x-1/2 z-20">
                         { autoplayMode === 'off' && 'Off: No automatic moves.' }
                         { autoplayMode === 'obvious' && 'Obvious: Automatically moves cards to the foundations.' }
-                        { autoplayMode === 'won' && 'Won: Finishes the game automatically when all cards are face up.' }
+                        { autoplayMode === 'won' && 'Finishes the game automatically when all cards are face up.' }
                     </div>
                 </div>
             </footer>
@@ -1353,13 +1350,20 @@ const App: React.FC = () => {
                 }
                 
                 @keyframes auto-move {
-                    0% { transform: translate(0, 0) scale(1) rotate(0deg); }
-                    15% { transform: translate(0, -15px) scale(1.05) rotate(3deg); }
-                    85% { transform: translate(var(--translateX), calc(var(--translateY) - 15px)) scale(1.05) rotate(3deg); }
-                    100% { transform: translate(var(--translateX), var(--translateY)) scale(1) rotate(0deg); }
+                    0% { 
+                        transform: translate(0, 0) scale(1) rotate(0); 
+                        animation-timing-function: cubic-bezier(0.3, 0, 0.8, 0.5);
+                    }
+                    40% { 
+                        transform: translate(calc(var(--translateX) * 0.4), calc(var(--translateY) * 0.4 - 40px)) scale(1.1) rotate(8deg); 
+                        animation-timing-function: cubic-bezier(0.2, 0.5, 0.7, 1);
+                    }
+                    100% { 
+                        transform: translate(var(--translateX), var(--translateY)) scale(1) rotate(0); 
+                    }
                 }
                 .auto-move-card {
-                    animation: auto-move 0.4s ease-in-out forwards;
+                    animation: auto-move 0.5s ease-out forwards;
                 }
                 
                 @keyframes return-card {
@@ -1400,43 +1404,43 @@ const App: React.FC = () => {
                     border-radius: 0.5rem; /* Ensure shadow follows rounded corners */
                 }
 
-                /* Foundation Card Effect */
-                @keyframes sparkle-fly {
+                /* Cuter Foundation Card Effect */
+                @keyframes pop-out {
                     0% { transform: translate(0, 0) scale(0.5); opacity: 1; }
-                    100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+                    100% { transform: translate(var(--tx), var(--ty)) scale(1.5); opacity: 0; }
                 }
-                .sparkle {
+                .cute-star {
                     position: absolute;
                     top: 50%;
                     left: 50%;
-                    width: 12px;
-                    height: 12px;
-                    margin: -6px 0 0 -6px;
+                    width: 14px;
+                    height: 14px;
+                    margin: -7px 0 0 -7px;
                     background: var(--color, #FFD700);
-                    border-radius: 50%;
-                    animation: sparkle-fly 0.8s ease-out forwards;
-                    box-shadow: 0 0 5px var(--color, #FFD700), 0 0 10px #FFF;
+                    clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+                    animation: pop-out 0.7s ease-out forwards;
+                    filter: drop-shadow(0 0 3px var(--color, #FFD700));
                 }
 
-                @keyframes suit-celebrate {
+                @keyframes heart-celebrate {
                     0% {
-                        transform: translate(0, 0) scale(0.6) rotate(0deg);
+                        transform: translate(0, 0) scale(0.6);
                         opacity: 1;
                     }
                     100% {
-                        transform: translate(var(--tx), var(--ty)) scale(1.2) rotate(var(--rotation));
+                        transform: translate(var(--tx), var(--ty)) scale(1.3);
                         opacity: 0;
                     }
                 }
-                .suit-particle {
+                .heart-particle {
                     position: absolute;
                     top: 50%;
                     left: 50%;
                     font-size: 2rem;
                     font-weight: bold;
-                    color: var(--color);
+                    color: #ef4444;
                     text-shadow: 0 0 5px rgba(255,255,255,0.7);
-                    animation: suit-celebrate 1s ease-out forwards;
+                    animation: heart-celebrate 0.8s ease-out forwards;
                 }
 
 
