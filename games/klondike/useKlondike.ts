@@ -192,12 +192,12 @@ export const useKlondike = ({ theme }: UseKlondikeProps) => {
             // 2. Shuffle Animation
             setShuffleClass('perform-shuffle');
             
-            const dealStartTime = 1200; // after shuffle animation (1.2s)
+            const dealStartTime = 800; // after shuffle animation (0.8s)
             
             // 3. Prepare dealing animation data
             const flyingCards: typeof dealAnimationCards = [];
             let dealDelay = 0;
-            const dealStagger = 40;
+            const dealStagger = 25;
 
             const fromRect = initialDeckRef.current.getBoundingClientRect();
             if (!fromRect) return;
@@ -261,7 +261,7 @@ export const useKlondike = ({ theme }: UseKlondikeProps) => {
                 setDealAnimationCards([]);
                 setShuffleClass('');
                 setTime(0);
-            }, dealStartTime + dealDelay + 500); // 500ms is anim duration
+            }, dealStartTime + dealDelay + 400); // 400ms is anim duration
         }
     }, [isDealing, cardSize.width]);
 

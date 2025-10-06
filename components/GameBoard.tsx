@@ -5,15 +5,17 @@ import EmptyPile from './EmptyPile';
 import WinModal from './WinModal';
 import RulesModal from './RulesModal';
 import PauseModal from './PauseModal';
-import { Suit } from '../types';
+import { Suit, Rank } from '../types';
 import { SUITS, SUIT_COLOR_MAP, SUIT_SYMBOL_MAP } from '../constants';
 
 
 interface GameBoardProps {
     controller: KlondikeController;
+    onTitleClick: () => void;
+    onSettingsClick: () => void;
 }
 
-const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
+const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSettingsClick }) => {
     const {
         Board, Card, stock, waste, foundations, tableau, history, isWon, isRulesModalOpen, shakeCardId, pressedStack, hint, moves, time, isPaused, turnMode, autoplayMode,
         cardSize, shuffleClass, isDealing, dealAnimationCards, animationData, returnAnimationData, stockAnimationData, dragGhost, dragSourceInfo, hiddenCardIds, foundationFx,
@@ -22,6 +24,8 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
     } = controller;
     
     const buttonClasses = "bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition duration-200 disabled:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed";
+    const iconButtonClasses = "bg-green-700 hover:bg-green-600 text-white font-bold p-2 rounded-lg transition duration-200 disabled:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed";
+
 
     return (
         <Board shuffleClass={shuffleClass}>
@@ -48,7 +52,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
                         transform: 'translateX(-50%)'
                     }}
                 >
-                    <Card card={{ id: -1, suit: Suit.SPADES, rank: 'A', faceUp: false }} width={cardSize.width} height={cardSize.height} />
+                    <Card card={{ id: -1, suit: Suit.SPADES, rank: Rank.ACE, faceUp: false }} width={cardSize.width} height={cardSize.height} />
                 </div>
             )}
             
@@ -58,13 +62,11 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
                 if (!fromRect || !toRect) return null;
 
                 const drawnCardsCount = stockAnimationData.cards.length;
-                // This is the index from last-drawn (0) to first-drawn (drawnCardsCount - 1)
                 const cardDrawIndex = drawnCardsCount - 1 - i; 
 
                 const wasteCountAfter = stockAnimationData.wasteCountBefore + drawnCardsCount;
                 const visibleWasteCount = Math.min(3, wasteCountAfter);
 
-                // The card's final position in the visible stack (0 is bottom-most, visibleWasteCount-1 is top-most)
                 const finalVisibleIndex = visibleWasteCount - 1 - cardDrawIndex;
 
                 const offset = finalVisibleIndex >= 0 ? finalVisibleIndex * 12 : 0;
@@ -209,7 +211,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
 
             <div className="max-w-7xl mx-auto w-full">
                 <header className={`flex flex-wrap justify-between items-center gap-4 mb-4 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
-                    <h1 className="text-3xl sm:text-4xl font-bold tracking-wider">Klondike</h1>
+                    <h1 onClick={onTitleClick} className="text-3xl sm:text-4xl font-bold tracking-wider cursor-pointer hover:text-green-300 transition-colors">Klondike</h1>
 
                     <div className="flex-grow flex justify-center items-center flex-wrap gap-x-6 gap-y-2">
                         <div className="relative group">
@@ -244,20 +246,12 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
                             <div ref={wasteRef} className="relative" style={{ width: cardSize.width, height: cardSize.height }}>
                                 <EmptyPile width={cardSize.width} height={cardSize.height}/>
                                 {(() => {
-                                    // These are the cards that are *not* currently part of an animation
                                     const stationaryWasteCards = waste.filter(c => !hiddenCardIds.includes(c.id));
-                                    // We only want to display up to 3 cards
                                     const displayableWaste = stationaryWasteCards.slice(0, 3);
-
-                                    // The true top card of the entire waste pile.
                                     const trueTopCard = waste[0];
 
                                     return displayableWaste.map((card, index) => {
-                                        // A card is interactive only if it's the true top card of the waste pile
-                                        // AND it's not currently being animated (which is guaranteed by the filter above).
                                         const isInteractive = card.id === trueTopCard?.id;
-                                        
-                                        // The visual offset depends on the card's position in the displayed stack.
                                         const offset = (displayableWaste.length - 1 - index) * 12;
 
                                         return (
@@ -273,7 +267,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
                                                 />
                                             </div>
                                         );
-                                    }).reverse(); // Render from bottom to top
+                                    }).reverse();
                                 })()}
                             </div>
                         </div>
@@ -285,7 +279,6 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
                                 const topCard = pile[pile.length - 1];
                                 return (
                                     <div key={i} ref={el => { foundationRefs.current[i] = el; }} className="relative" style={{ width: cardSize.width, height: cardSize.height }}>
-                                        {/* Background rendering */}
                                         {(pile.length === 0 || (pile.length === 1 && isTopCardDragging)) &&
                                             <EmptyPile width={cardSize.width} height={cardSize.height}>
                                                 <div className={`text-5xl ${SUIT_COLOR_MAP[SUITS[i]] === 'red' ? 'text-red-400/60' : 'text-white/30'} font-thin`}>
@@ -297,7 +290,6 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
                                             <Card card={pile[pile.length - 2]} width={cardSize.width} height={cardSize.height}/>
                                         }
 
-                                        {/* Top card rendering */}
                                         {pile.length > 0 && 
                                             <div className="absolute top-0 left-0">
                                                 <Card 
@@ -313,11 +305,10 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
                                         }
                                         {foundationFx?.index === i && (
                                             <div className="absolute inset-0 pointer-events-none z-10">
-                                                {/* Cute Stars */}
                                                 {Array.from({ length: 8 }).map((_, j) => {
                                                     const angle = (j / 8) * 2 * Math.PI;
                                                     const radius = 50 + Math.random() * 30;
-                                                    const color = ['#fde047', '#f9a8d4', '#a7f3d0'][j % 3]; // Cute pastel colors
+                                                    const color = ['#fde047', '#f9a8d4', '#a7f3d0'][j % 3];
                                                     return (
                                                         <div 
                                                             key={`star-${j}`} 
@@ -331,7 +322,6 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
                                                         />
                                                     );
                                                 })}
-                                                {/* Cute Hearts */}
                                                 {Array.from({ length: 5 }).map((_, j) => {
                                                     const angle = (Math.random() - 0.5) * (Math.PI / 2);
                                                     const radius = 40 + Math.random() * 30;
@@ -419,6 +409,12 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
                         { autoplayMode === 'won' && 'Finishes the game automatically when all cards are face up.' }
                     </div>
                 </div>
+                 <button onClick={onSettingsClick} className={iconButtonClasses} aria-label="Settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                </button>
             </footer>
             <style>{`
                 @keyframes deal-card-fly {
@@ -439,7 +435,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
                     position: fixed;
                     z-index: 200;
                     opacity: 0;
-                    animation: deal-card-fly 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+                    animation: deal-card-fly 0.4s cubic-bezier(0.25, 1, 0.5, 1) forwards;
                 }
 
                 @keyframes shuffle-and-fade {
@@ -452,7 +448,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
                     100% { transform: translateX(-50%) scale(1) rotate(0deg); opacity: 0; }
                 }
                 .perform-shuffle .initial-deck-visual {
-                    animation: shuffle-and-fade 1.2s ease-in-out forwards;
+                    animation: shuffle-and-fade 0.8s ease-in-out forwards;
                 }
                 
                 @keyframes auto-move {
@@ -505,12 +501,11 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
                 .card-hint {
                     animation: pulse-gold 1.5s infinite ease-in-out;
                 }
-                .stock-hint > div { /* Target the inner card or empty pile */
+                .stock-hint > div {
                     animation: pulse-gold 1.5s infinite ease-in-out;
-                    border-radius: 0.5rem; /* Ensure shadow follows rounded corners */
+                    border-radius: 0.5rem;
                 }
 
-                /* Cuter Foundation Card Effect */
                 @keyframes pop-out {
                     0% { transform: translate(0, 0) scale(0.5); opacity: 1; }
                     100% { transform: translate(var(--tx), var(--ty)) scale(1.5); opacity: 0; }
@@ -550,7 +545,6 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller }) => {
                 }
 
 
-                /* Stock/Waste Animation Styles */
                 @keyframes stock-turn-move {
                     from {
                         transform: translate(0, 0) rotate(5deg) scale(1.05);
