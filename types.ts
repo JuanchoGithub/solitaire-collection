@@ -1,3 +1,5 @@
+import React from 'react';
+
 export enum Suit {
   HEARTS = 'HEARTS',
   DIAMONDS = 'DIAMONDS',
@@ -26,4 +28,27 @@ export interface CardType {
   suit: Suit;
   rank: Rank;
   faceUp: boolean;
+}
+
+export interface CardThemeProps {
+  card: CardType;
+  onMouseDown?: (e: React.MouseEvent<HTMLDivElement>) => void;
+  style?: React.CSSProperties;
+  isDragging?: boolean;
+  width: number;
+  height: number;
+  isShaking?: boolean;
+  isPressed?: boolean;
+  isHinted?: boolean;
+}
+
+export interface BoardThemeProps {
+  children: React.ReactNode;
+  shuffleClass: string;
+}
+
+export interface Theme {
+    Card: React.FC<CardThemeProps>;
+    Board: React.FC<BoardThemeProps>;
+    CardBack: React.FC<any>;
 }

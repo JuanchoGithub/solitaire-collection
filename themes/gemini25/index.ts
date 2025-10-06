@@ -7,5 +7,3 @@ export const GeminiTheme = {
     Board: GeminiBoard,
     CardBack: GeminiCardBack
 };
-
-export type Theme = typeof GeminiTheme;
