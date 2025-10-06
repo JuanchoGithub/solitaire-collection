@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { CardType, DragInfo, GameState } from './types';
 import { Suit, Rank } from './types';
@@ -19,6 +20,12 @@ type AnimationState = {
   source: 'tableau' | 'waste' | 'foundation';
   sourcePileIndex: number;
   sourceCardIndex: number;
+} | null;
+
+type ReturnAnimationData = {
+    cards: CardType[];
+    from: { x: number; y: number };
+    toRect: DOMRect;
 } | null;
 
 type StockAnimationData = {
@@ -69,13 +76,17 @@ const App: React.FC = () => {
     const [shakeCardId, setShakeCardId] = useState<number | null>(null);
     const [pressedStack, setPressedStack] = useState<{ source: 'tableau' | 'waste' | 'foundation', sourcePileIndex: number, sourceCardIndex: number } | null>(null);
     const [hint, setHint] = useState<HintState>(null);
+    const [allHints, setAllHints] = useState<HintState[]>([]);
+    const [hintIndex, setHintIndex] = useState<number>(-1);
+
 
     // Gameplay Stats & Settings
     const [moves, setMoves] = useState(0);
     const [time, setTime] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
     const [turnMode, setTurnMode] = useState<1 | 3>(3);
-    const [autoplayMode, setAutoplayMode] = useState<'off' | 'obvious' | 'won'>('off');
+    const [autoplayMode, setAutoplayMode] = useState<'off' | 'obvious' | 'won'>('obvious');
+    const [recentlyMovedFromFoundation, setRecentlyMovedFromFoundation] = useState<number | null>(null);
 
     // Responsive Sizing
     const [cardSize, setCardSize] = useState({ width: 100, height: 140, faceUpStackOffset: 28, faceDownStackOffset: 12 });
@@ -86,9 +97,11 @@ const App: React.FC = () => {
     const [dealAnimationCards, setDealAnimationCards] = useState<{ card: CardType; style: React.CSSProperties; key: number }[]>([]);
     const [shuffleClass, setShuffleClass] = useState('');
     const [animationData, setAnimationData] = useState<AnimationState>(null);
+    const [returnAnimationData, setReturnAnimationData] = useState<ReturnAnimationData>(null);
     const [stockAnimationData, setStockAnimationData] = useState<StockAnimationData>(null);
     const [isAnimating, setIsAnimating] = useState(false);
     const [hiddenCardIds, setHiddenCardIds] = useState<number[]>([]);
+    const [foundationFx, setFoundationFx] = useState<{ index: number; suit: Suit } | null>(null);
     const animationEndHandled = useRef(false);
     const hintTimeoutRef = useRef<number | null>(null);
 
@@ -136,6 +149,7 @@ const App: React.FC = () => {
         setInteractionState(null);
         setIsRulesModalOpen(false);
         setAnimationData(null);
+        setReturnAnimationData(null);
         setStockAnimationData(null);
         setIsAnimating(false);
         setHiddenCardIds([]);
@@ -145,6 +159,7 @@ const App: React.FC = () => {
         setTime(0);
         setHistory([]);
         setIsPaused(false);
+        setRecentlyMovedFromFoundation(null);
 
         // Reset game state for new deal
         setTableau(Array.from({ length: 7 }, () => []));
@@ -300,7 +315,7 @@ const App: React.FC = () => {
         const findAndExecuteFoundationMove = (): boolean => {
             // Check waste card first
             const topWasteCard = waste[0];
-            if (topWasteCard) {
+            if (topWasteCard && topWasteCard.id !== recentlyMovedFromFoundation) {
                 const foundationIndex = SUITS.indexOf(topWasteCard.suit);
                 const targetPile = foundations[foundationIndex];
                 const topCard = targetPile[targetPile.length - 1];
@@ -315,7 +330,7 @@ const App: React.FC = () => {
             for (let i = 0; i < tableau.length; i++) {
                 const pile = tableau[i];
                 const topTableauCard = pile[pile.length - 1];
-                if (topTableauCard?.faceUp) {
+                if (topTableauCard?.faceUp && topTableauCard.id !== recentlyMovedFromFoundation) {
                     const foundationIndex = SUITS.indexOf(topTableauCard.suit);
                     const targetPile = foundations[foundationIndex];
                     const topCard = targetPile[targetPile.length - 1];
@@ -332,14 +347,14 @@ const App: React.FC = () => {
         const isGameWinnable = stock.length === 0 && tableau.flat().every(c => c.faceUp);
 
         if (autoplayMode === 'obvious') {
-            const timeoutId = setTimeout(findAndExecuteFoundationMove, 500);
+            const timeoutId = setTimeout(findAndExecuteFoundationMove, 150);
             return () => clearTimeout(timeoutId);
         } else if (autoplayMode === 'won' && isGameWinnable) {
-            const timeoutId = setTimeout(findAndExecuteFoundationMove, 200);
+            const timeoutId = setTimeout(findAndExecuteFoundationMove, 75);
             return () => clearTimeout(timeoutId);
         }
 
-    }, [autoplayMode, tableau, waste, foundations, stock, isPaused, isAnimating, isDealing, interactionState, isWon, cardSize, stockAnimationData]);
+    }, [autoplayMode, tableau, waste, foundations, stock, isPaused, isAnimating, isDealing, interactionState, isWon, cardSize, stockAnimationData, recentlyMovedFromFoundation]);
 
     const saveStateToHistory = () => {
         setHistory(prev => [...prev, { stock, waste, foundations, tableau, moves }]);
@@ -354,6 +369,7 @@ const App: React.FC = () => {
         setTableau(lastState.tableau);
         setMoves(lastState.moves);
         setHistory(prev => prev.slice(0, -1));
+        setRecentlyMovedFromFoundation(null);
     };
 
     const handleTurnModeToggle = () => {
@@ -372,6 +388,7 @@ const App: React.FC = () => {
         if (isAnimating || isPaused || isDealing || stockAnimationData) return;
         if (stock.length === 0 && waste.length === 0) return;
         setHint(null);
+        setRecentlyMovedFromFoundation(null);
 
         saveStateToHistory();
         setMoves(prev => prev + 1);
@@ -379,7 +396,7 @@ const App: React.FC = () => {
         if (stock.length > 0) {
             const cardsToDraw = Math.min(stock.length, turnMode);
             const drawnCards = stock.slice(-cardsToDraw);
-            const turnedCards = drawnCards.map(c => ({...c, faceUp: true})).reverse();
+            const turnedCards = drawnCards.map(c => ({...c, faceUp: true}));
 
             // Hide cards in waste pile while they animate
             setHiddenCardIds(turnedCards.map(c => c.id));
@@ -388,8 +405,8 @@ const App: React.FC = () => {
             setStock(prev => prev.slice(0, prev.length - cardsToDraw));
             setWaste(prev => [...turnedCards, ...prev]);
 
-            // Set animation data. The cards are still face-down in `drawnCards`.
-            setStockAnimationData({ type: 'turn', cards: drawnCards, wasteCountBefore: waste.length });
+            // Set animation data. Reverse the cards for the animation so they appear to be dealt off the top correctly.
+            setStockAnimationData({ type: 'turn', cards: [...drawnCards].reverse(), wasteCountBefore: waste.length });
             
             // After animation, unhide cards.
             setTimeout(() => {
@@ -404,100 +421,149 @@ const App: React.FC = () => {
             setStockAnimationData({ type: 'reset', cards: cardsToReset });
 
             setTimeout(() => {
-                // This ensures the same sequence of cards is available on each pass.
-                const newStock = cardsToReset.reverse().map(c => ({...c, faceUp: false}));
+                // The waste pile becomes the new stock. The order is preserved to maintain the card sequence cycle.
+                const newStock = cardsToReset.map(c => ({ ...c, faceUp: false }));
                 setStock(newStock);
                 setStockAnimationData(null);
             }, 500 + (cardsToReset.length - 1) * 20); // smaller delay for faster reset animation
         }
     };
 
+    const findAllHints = useCallback((): HintState[] => {
+        const getHintsForPriority = (priority: number): HintState[] => {
+            const hints: HintState[] = [];
+            const hintedCardIds = new Set<number>();
+            const addHint = (cardId: number) => {
+                if (!hintedCardIds.has(cardId)) {
+                    hints.push({ type: 'card', cardId });
+                    hintedCardIds.add(cardId);
+                }
+            };
+
+            if (priority === 1) { // Move to foundation
+                const topWasteCard = waste[0];
+                if (topWasteCard) {
+                    const foundationIndex = SUITS.indexOf(topWasteCard.suit);
+                    const targetPile = foundations[foundationIndex];
+                    const topCard = targetPile[targetPile.length - 1];
+                    if ((!topCard && topWasteCard.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[topWasteCard.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
+                        addHint(topWasteCard.id);
+                    }
+                }
+                for (const pile of tableau) {
+                    const topTableauCard = pile[pile.length - 1];
+                    if (topTableauCard?.faceUp) {
+                        const foundationIndex = SUITS.indexOf(topTableauCard.suit);
+                        const targetPile = foundations[foundationIndex];
+                        const topCard = targetPile[targetPile.length - 1];
+                        if ((!topCard && topTableauCard.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[topTableauCard.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
+                            addHint(topTableauCard.id);
+                        }
+                    }
+                }
+                return hints;
+            }
+            
+            if (priority === 2) { // Uncover a face-down card
+                for (const sourcePile of tableau) {
+                    const firstFaceUpIndex = sourcePile.findIndex(c => c.faceUp);
+                    if (firstFaceUpIndex > 0) {
+                        for (let i = firstFaceUpIndex; i < sourcePile.length; i++) {
+                            const cardToMove = sourcePile[i];
+                            for (const destPile of tableau) {
+                                if (sourcePile === destPile) continue;
+                                const topDestCard = destPile[destPile.length - 1];
+                                if ((!topDestCard && cardToMove.rank === Rank.KING) || (topDestCard?.faceUp && SUIT_COLOR_MAP[cardToMove.suit] !== SUIT_COLOR_MAP[topDestCard.suit] && RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1)) {
+                                    addHint(cardToMove.id);
+                                }
+                            }
+                        }
+                    }
+                }
+                return hints;
+            }
+
+            if (priority === 3) { // Move from waste to tableau
+                const topWasteCard = waste[0];
+                if (topWasteCard) {
+                     for (const pile of tableau) {
+                        const topCard = pile[pile.length - 1];
+                        if ((!topCard && topWasteCard.rank === Rank.KING) || (topCard?.faceUp && SUIT_COLOR_MAP[topWasteCard.suit] !== SUIT_COLOR_MAP[topCard.suit] && RANK_VALUE_MAP[topWasteCard.rank] === RANK_VALUE_MAP[topCard.rank] - 1)) {
+                             addHint(topWasteCard.id);
+                        }
+                    }
+                }
+                return hints;
+            }
+
+            if (priority === 4) { // Any other tableau move
+                for (const sourcePile of tableau) {
+                   const firstFaceUpIndex = sourcePile.findIndex(c => c.faceUp);
+                    if (firstFaceUpIndex !== -1) {
+                       for (let i = firstFaceUpIndex; i < sourcePile.length; i++) {
+                           const cardToMove = sourcePile[i];
+                           for (const destPile of tableau) {
+                               if (sourcePile === destPile) continue;
+                               const topDestCard = destPile[destPile.length - 1];
+                                if ((!topDestCard && cardToMove.rank === Rank.KING) || (topDestCard?.faceUp && SUIT_COLOR_MAP[cardToMove.suit] !== SUIT_COLOR_MAP[topDestCard.suit] && RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1)) {
+                                   addHint(cardToMove.id);
+                               }
+                           }
+                       }
+                   }
+               }
+               return hints;
+            }
+
+            return [];
+        };
+
+        for (let priority = 1; priority <= 4; priority++) {
+            const hints = getHintsForPriority(priority);
+            if (hints.length > 0) {
+                return hints;
+            }
+        }
+
+        if (stock.length > 0 || waste.length > 0) {
+            return [{ type: 'stock' }];
+        }
+
+        return [];
+    }, [stock, waste, tableau, foundations]);
+
     const handleHint = useCallback(() => {
         if (hintTimeoutRef.current) {
             clearTimeout(hintTimeoutRef.current);
         }
 
-        const findHint = (): HintState => {
-            // Priority 1: Move card to foundation
-            const topWasteCard = waste[0];
-            if (topWasteCard) {
-                const foundationIndex = SUITS.indexOf(topWasteCard.suit);
-                const targetPile = foundations[foundationIndex];
-                const topCard = targetPile[targetPile.length - 1];
-                if ((!topCard && topWasteCard.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[topWasteCard.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
-                    return { type: 'card', cardId: topWasteCard.id };
-                }
-            }
-            for (const pile of tableau) {
-                const topTableauCard = pile[pile.length - 1];
-                if (topTableauCard?.faceUp) {
-                    const foundationIndex = SUITS.indexOf(topTableauCard.suit);
-                    const targetPile = foundations[foundationIndex];
-                    const topCard = targetPile[targetPile.length - 1];
-                    if ((!topCard && topTableauCard.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[topTableauCard.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
-                        return { type: 'card', cardId: topTableauCard.id };
-                    }
-                }
-            }
+        let currentHints = allHints;
+        let currentIdx = hintIndex;
 
-            // Priority 2: Uncover a face-down card in the tableau
-            for (const sourcePile of tableau) {
-                const firstFaceUpIndex = sourcePile.findIndex(c => c.faceUp);
-                if (firstFaceUpIndex > 0) { // This means there's a face-down card under a face-up one
-                    for (let i = firstFaceUpIndex; i < sourcePile.length; i++) {
-                        const cardToMove = sourcePile[i];
-                        for (const destPile of tableau) {
-                            if (sourcePile === destPile) continue;
-                            const topDestCard = destPile[destPile.length - 1];
-                            if ((!topDestCard && cardToMove.rank === Rank.KING) || (topDestCard?.faceUp && SUIT_COLOR_MAP[cardToMove.suit] !== SUIT_COLOR_MAP[topDestCard.suit] && RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1)) {
-                                return { type: 'card', cardId: cardToMove.id };
-                            }
-                        }
-                    }
-                }
-            }
-            
-            // Priority 3: Move card from waste to tableau
-            if (topWasteCard) {
-                 for (const pile of tableau) {
-                    const topCard = pile[pile.length - 1];
-                    if ((!topCard && topWasteCard.rank === Rank.KING) || (topCard?.faceUp && SUIT_COLOR_MAP[topWasteCard.suit] !== SUIT_COLOR_MAP[topCard.suit] && RANK_VALUE_MAP[topWasteCard.rank] === RANK_VALUE_MAP[topCard.rank] - 1)) {
-                         return { type: 'card', cardId: topWasteCard.id };
-                    }
-                }
-            }
-            
-            // Priority 4: Any other valid tableau move
-             for (const sourcePile of tableau) {
-                const firstFaceUpIndex = sourcePile.findIndex(c => c.faceUp);
-                 if (firstFaceUpIndex !== -1) {
-                    for (let i = firstFaceUpIndex; i < sourcePile.length; i++) {
-                        const cardToMove = sourcePile[i];
-                        for (const destPile of tableau) {
-                            if (sourcePile === destPile) continue;
-                            const topDestCard = destPile[destPile.length - 1];
-                             if ((!topDestCard && cardToMove.rank === Rank.KING) || (topDestCard?.faceUp && SUIT_COLOR_MAP[cardToMove.suit] !== SUIT_COLOR_MAP[topDestCard.suit] && RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1)) {
-                                return { type: 'card', cardId: cardToMove.id };
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Priority 5: Turn stock
-            if (stock.length > 0 || waste.length > 0) {
-                return { type: 'stock' };
-            }
-
-            return null; // No moves found
-        };
-
-        const foundHint = findHint();
-        setHint(foundHint);
-        if (foundHint) {
-            hintTimeoutRef.current = window.setTimeout(() => setHint(null), 3000);
+        if (currentIdx === -1 || currentHints.length === 0) {
+            currentHints = findAllHints();
+            setAllHints(currentHints);
+            currentIdx = 0;
+        } else {
+            currentIdx = (currentIdx + 1) % (currentHints.length || 1);
         }
-    }, [stock, waste, tableau, foundations]);
+        
+        setHintIndex(currentIdx);
+
+        if (currentHints.length > 0) {
+            const foundHint = currentHints[currentIdx];
+            setHint(foundHint);
+            hintTimeoutRef.current = window.setTimeout(() => {
+                setHint(null);
+                setHintIndex(-1);
+                setAllHints([]);
+            }, 3000);
+        } else {
+            setHint(null);
+            setHintIndex(-1);
+            setAllHints([]);
+        }
+    }, [allHints, hintIndex, findAllHints]);
     
     // Custom Click and Drag Logic
     const handleMouseDown = (
@@ -567,8 +633,12 @@ const App: React.FC = () => {
         if (!interactionState) return;
         setPressedStack(null);
 
+        let wasDrag = false;
+        let moveMadeOnDrag = false;
+
         // --- DRAG-AND-DROP LOGIC ---
         if (dragGhost && dragSourceInfo) {
+            wasDrag = true;
             const findDropTarget = (x: number, y: number): { type: 'tableau' | 'foundation', index: number } | null => {
                 for (let i = 0; i < foundationRefs.current.length; i++) {
                     const el = foundationRefs.current[i];
@@ -603,6 +673,8 @@ const App: React.FC = () => {
                         if (movedCard.suit === SUITS[target.index] &&
                             ((!topFoundationCard && movedCard.rank === Rank.ACE) ||
                                 (topFoundationCard && RANK_VALUE_MAP[movedCard.rank] === RANK_VALUE_MAP[topFoundationCard.rank] + 1))) {
+                            moveMadeOnDrag = true;
+                            setRecentlyMovedFromFoundation(null);
                             saveStateToHistory();
                             setMoves(m => m + 1);
                             const newFoundations = foundations.map((pile, i) => i === target.index ? [...pile, movedCard] : pile);
@@ -620,6 +692,8 @@ const App: React.FC = () => {
                                     return newTableau;
                                 });
                             }
+                             setFoundationFx({ index: target.index, suit: movedCard.suit });
+                             setTimeout(() => setFoundationFx(null), 1000);
                         }
                     }
                 } else if (target.type === 'tableau') {
@@ -629,6 +703,14 @@ const App: React.FC = () => {
                         (topTableauCard && topTableauCard.faceUp &&
                             SUIT_COLOR_MAP[movedCard.suit] !== SUIT_COLOR_MAP[topTableauCard.suit] &&
                             RANK_VALUE_MAP[movedCard.rank] === RANK_VALUE_MAP[topTableauCard.rank] - 1)) {
+                        
+                        moveMadeOnDrag = true;
+                        if (source === 'foundation') {
+                           setRecentlyMovedFromFoundation(movedCard.id);
+                        } else {
+                           setRecentlyMovedFromFoundation(null);
+                        }
+                        
                         saveStateToHistory();
                         setMoves(m => m + 1);
                         if (source === 'waste') {
@@ -652,6 +734,30 @@ const App: React.FC = () => {
                         }
                     }
                 }
+            }
+
+            if (!moveMadeOnDrag) {
+                let toRect;
+                const { source, sourcePileIndex, cards } = dragSourceInfo;
+                
+                // The condition causing the card to unmount is when all cards in a tableau pile are dragged.
+                // In this case, we use the stable parent pile element as the animation target.
+                const sourcePile = source === 'tableau' ? tableau[sourcePileIndex] : undefined;
+
+                if (source === 'tableau' && sourcePile && cards.length === sourcePile.length) {
+                    const pileEl = tableauRefs.current[sourcePileIndex];
+                    // If the ref is available, use its rect. Fallback to the potentially detached element's rect.
+                    toRect = pileEl ? pileEl.getBoundingClientRect() : interactionState.element.getBoundingClientRect();
+                } else {
+                    // For all other cases (waste, foundation, partial tableau stack), the original element is still mounted.
+                    toRect = interactionState.element.getBoundingClientRect();
+                }
+
+                setReturnAnimationData({
+                    cards: dragGhost.cards,
+                    from: { x: dragGhost.x, y: dragGhost.y },
+                    toRect,
+                });
             }
         // --- CLICK (AUTO-MOVE) LOGIC ---
         } else {
@@ -679,6 +785,7 @@ const App: React.FC = () => {
                             const toRect = foundationRefs.current[i]?.getBoundingClientRect();
                             if (toRect) {
                                 animationEndHandled.current = false;
+                                setRecentlyMovedFromFoundation(null);
                                 setHiddenCardIds([card.id]);
                                 setAnimationData({ card, fromRect: element.getBoundingClientRect(), toRect, destinationType: 'foundation', destinationIndex: i, source, sourcePileIndex, sourceCardIndex });
                                 setTimeout(() => setIsAnimating(true), 10);
@@ -711,6 +818,7 @@ const App: React.FC = () => {
                                 const toRect = new DOMRect(parentRect.x, parentRect.y + topOffset, parentRect.width, parentRect.height);
 
                                 animationEndHandled.current = false;
+                                setRecentlyMovedFromFoundation(null);
                                 setHiddenCardIds([card.id]);
                                 setAnimationData({ card, fromRect: element.getBoundingClientRect(), toRect, destinationType: 'tableau', destinationIndex: i, source, sourcePileIndex, sourceCardIndex });
                                 setTimeout(() => setIsAnimating(true), 10);
@@ -725,10 +833,12 @@ const App: React.FC = () => {
             }
         }
         
-        // Cleanup for both paths
+        // Unified cleanup for both paths
         setInteractionState(null);
         setDragGhost(null);
-        setDragSourceInfo(null);
+        if (!wasDrag || moveMadeOnDrag) {
+            setDragSourceInfo(null);
+        }
 
     }, [interactionState, dragGhost, dragSourceInfo, foundations, tableau, isPaused, cardSize.faceDownStackOffset, cardSize.faceUpStackOffset]);
     
@@ -753,6 +863,8 @@ const App: React.FC = () => {
         const { card, destinationType, destinationIndex, source, sourcePileIndex } = animationData;
 
         if (destinationType === 'foundation') {
+            setFoundationFx({ index: destinationIndex, suit: card.suit });
+            setTimeout(() => setFoundationFx(null), 1000);
             setFoundations(prev => prev.map((p, i) => i === destinationIndex ? [...p, card] : p));
             if (source === 'waste') {
                 setWaste(prev => prev.slice(1));
@@ -788,6 +900,11 @@ const App: React.FC = () => {
         setAnimationData(null);
         setIsAnimating(false);
         setHiddenCardIds([]);
+    };
+
+    const handleReturnAnimationEnd = () => {
+        setReturnAnimationData(null);
+        setDragSourceInfo(null);
     };
 
     const formatTime = (totalSeconds: number) => {
@@ -950,6 +1067,38 @@ const App: React.FC = () => {
                     </div>
                 </div>
             )}
+            
+            {returnAnimationData && (
+                <div
+                    className="return-animation"
+                    style={{
+                        position: 'fixed',
+                        top: `${returnAnimationData.from.y}px`,
+                        left: `${returnAnimationData.from.x}px`,
+                        zIndex: 1000,
+                        pointerEvents: 'none',
+                        '--translateX': `${returnAnimationData.toRect.left - returnAnimationData.from.x}px`,
+                        '--translateY': `${returnAnimationData.toRect.top - returnAnimationData.from.y}px`,
+                    } as React.CSSProperties}
+                    onAnimationEnd={handleReturnAnimationEnd}
+                >
+                    <div style={{ position: 'relative', width: cardSize.width, height: cardSize.height }}>
+                        {returnAnimationData.cards.map((card, index) => (
+                            <Card 
+                                key={card.id}
+                                card={card} 
+                                width={cardSize.width} 
+                                height={cardSize.height}
+                                style={{
+                                    position: 'absolute',
+                                    top: `${index * cardSize.faceUpStackOffset}px`,
+                                    left: 0,
+                                }}
+                            />
+                        ))}
+                    </div>
+                </div>
+            )}
 
             <div className="max-w-7xl mx-auto w-full">
                 <header className={`flex flex-wrap justify-between items-center gap-4 mb-4 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
@@ -987,25 +1136,38 @@ const App: React.FC = () => {
                             </div>
                             <div ref={wasteRef} className="relative" style={{ width: cardSize.width, height: cardSize.height }}>
                                 <EmptyPile width={cardSize.width} height={cardSize.height}/>
-                                {waste.length > 0 && Array.from({ length: Math.min(waste.length, 3) }).map((_, i) => {
-                                    const card = waste[i];
-                                    const isTopCard = i === 0;
-                                    const offset = (Math.min(2, waste.length-1) - i) * 12;
+                                {(() => {
+                                    // These are the cards that are *not* currently part of an animation
+                                    const stationaryWasteCards = waste.filter(c => !hiddenCardIds.includes(c.id));
+                                    // We only want to display up to 3 cards
+                                    const displayableWaste = stationaryWasteCards.slice(0, 3);
 
-                                    return (!hiddenCardIds.includes(card.id) && (
-                                        <div key={card.id} className="absolute top-0" style={{left: `${offset}px`}}>
-                                            <Card 
-                                                card={card} 
-                                                onMouseDown={(e) => isTopCard && handleMouseDown(e, [card], 'waste', 0, 0)}
-                                                width={cardSize.width} 
-                                                height={cardSize.height}
-                                                isDragging={isTopCard && dragSourceInfo?.source === 'waste'}
-                                                isPressed={isTopCard && pressedStack?.source === 'waste'}
-                                                isHinted={hint?.type === 'card' && hint.cardId === card.id}
-                                            />
-                                        </div>
-                                    ));
-                                }).reverse()}
+                                    // The true top card of the entire waste pile.
+                                    const trueTopCard = waste[0];
+
+                                    return displayableWaste.map((card, index) => {
+                                        // A card is interactive only if it's the true top card of the waste pile
+                                        // AND it's not currently being animated (which is guaranteed by the filter above).
+                                        const isInteractive = card.id === trueTopCard?.id;
+                                        
+                                        // The visual offset depends on the card's position in the displayed stack.
+                                        const offset = (displayableWaste.length - 1 - index) * 12;
+
+                                        return (
+                                            <div key={card.id} className="absolute top-0" style={{left: `${offset}px`}}>
+                                                <Card 
+                                                    card={card} 
+                                                    onMouseDown={(e) => isInteractive && handleMouseDown(e, [card], 'waste', 0, 0)}
+                                                    width={cardSize.width} 
+                                                    height={cardSize.height}
+                                                    isDragging={isInteractive && dragSourceInfo?.source === 'waste'}
+                                                    isPressed={isInteractive && pressedStack?.source === 'waste'}
+                                                    isHinted={hint?.type === 'card' && hint.cardId === card.id}
+                                                />
+                                            </div>
+                                        );
+                                    }).reverse(); // Render from bottom to top
+                                })()}
                             </div>
                         </div>
 
@@ -1042,6 +1204,49 @@ const App: React.FC = () => {
                                                 />
                                             </div>
                                         }
+                                        {foundationFx?.index === i && (
+                                            <div className="absolute inset-0 pointer-events-none z-10">
+                                                {/* Sparkles */}
+                                                {Array.from({ length: 8 }).map((_, j) => {
+                                                    const angle = (j / 8) * 2 * Math.PI;
+                                                    const radius = 60 + Math.random() * 25;
+                                                    const color = SUIT_COLOR_MAP[foundationFx.suit] === 'red' ? '#ef4444' : '#64748b';
+                                                    return (
+                                                        <div 
+                                                            key={`sparkle-${j}`} 
+                                                            className="sparkle"
+                                                            style={{
+                                                                '--tx': `${Math.cos(angle) * radius}px`,
+                                                                '--ty': `${Math.sin(angle) * radius}px`,
+                                                                '--color': color,
+                                                                'animationDelay': `${Math.random() * 0.15}s`,
+                                                            } as React.CSSProperties}
+                                                        />
+                                                    );
+                                                })}
+                                                {/* Suit symbols */}
+                                                {Array.from({ length: 5 }).map((_, j) => {
+                                                    const angle = (Math.random() - 0.5) * (Math.PI / 4);
+                                                    const radius = 50 + Math.random() * 40;
+                                                    const color = SUIT_COLOR_MAP[foundationFx.suit] === 'red' ? '#ef4444' : '#1e293b';
+                                                    return (
+                                                        <div
+                                                            key={`suit-${j}`}
+                                                            className="suit-particle"
+                                                            style={{
+                                                                '--tx': `${Math.sin(angle) * radius}px`,
+                                                                '--ty': `${-Math.cos(angle) * radius}px`,
+                                                                '--color': color,
+                                                                '--rotation': `${(Math.random() - 0.5) * 90}deg`,
+                                                                'animationDelay': `${Math.random() * 0.2}s`,
+                                                            } as React.CSSProperties}
+                                                        >
+                                                            {SUIT_SYMBOL_MAP[foundationFx.suit]}
+                                                        </div>
+                                                    )
+                                                })}
+                                            </div>
+                                        )}
                                     </div>
                                 );
                             })}
@@ -1050,7 +1255,8 @@ const App: React.FC = () => {
 
                     <div className="flex flex-nowrap gap-4 justify-center">
                         {tableau.map((pile, pileIndex) => {
-                             const cardTops = pile.reduce<number[]>((acc, _card, index) => {
+// FIX: Explicitly type the accumulator in the reduce function to resolve the TypeScript error.
+                             const cardTops = pile.reduce((acc: number[], _card, index) => {
                                 if (index === 0) acc.push(0);
                                 else {
                                     const prevCard = pile[index-1];
@@ -1155,6 +1361,19 @@ const App: React.FC = () => {
                 .auto-move-card {
                     animation: auto-move 0.4s ease-in-out forwards;
                 }
+                
+                @keyframes return-card {
+                    from {
+                        transform: translate(0, 0) scale(1.05) rotate(3deg);
+                    }
+                    to {
+                        transform: translate(var(--translateX), var(--translateY)) scale(1) rotate(0deg);
+                    }
+                }
+                .return-animation {
+                    animation: return-card 0.3s ease-in-out forwards;
+                }
+
                 @keyframes card-shake {
                     10%, 90% { transform: translateX(-1px); }
                     20%, 80% { transform: translateX(2px); }
@@ -1180,6 +1399,46 @@ const App: React.FC = () => {
                     animation: pulse-gold 1.5s infinite ease-in-out;
                     border-radius: 0.5rem; /* Ensure shadow follows rounded corners */
                 }
+
+                /* Foundation Card Effect */
+                @keyframes sparkle-fly {
+                    0% { transform: translate(0, 0) scale(0.5); opacity: 1; }
+                    100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+                }
+                .sparkle {
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    width: 12px;
+                    height: 12px;
+                    margin: -6px 0 0 -6px;
+                    background: var(--color, #FFD700);
+                    border-radius: 50%;
+                    animation: sparkle-fly 0.8s ease-out forwards;
+                    box-shadow: 0 0 5px var(--color, #FFD700), 0 0 10px #FFF;
+                }
+
+                @keyframes suit-celebrate {
+                    0% {
+                        transform: translate(0, 0) scale(0.6) rotate(0deg);
+                        opacity: 1;
+                    }
+                    100% {
+                        transform: translate(var(--tx), var(--ty)) scale(1.2) rotate(var(--rotation));
+                        opacity: 0;
+                    }
+                }
+                .suit-particle {
+                    position: absolute;
+                    top: 50%;
+                    left: 50%;
+                    font-size: 2rem;
+                    font-weight: bold;
+                    color: var(--color);
+                    text-shadow: 0 0 5px rgba(255,255,255,0.7);
+                    animation: suit-celebrate 1s ease-out forwards;
+                }
+
 
                 /* Stock/Waste Animation Styles */
                 @keyframes stock-turn-move {
