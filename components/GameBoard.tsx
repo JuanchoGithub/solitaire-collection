@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { KlondikeController } from '../games/klondike/useKlondike';
 import EmptyPile from './EmptyPile';
@@ -210,8 +209,8 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
             )}
 
             <div className="max-w-7xl mx-auto w-full">
-                <header className={`flex flex-wrap justify-between items-center gap-4 mb-4 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
-                    <h1 onClick={onTitleClick} className="text-3xl sm:text-4xl font-bold tracking-wider cursor-pointer hover:text-green-300 transition-colors">Klondike</h1>
+                <header className={`flex flex-wrap justify-between items-center gap-4 mb-2 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
+                    <h1 onClick={onTitleClick} className="text-2xl sm:text-3xl font-serif tracking-wider cursor-pointer hover:text-green-300 transition-colors" style={{ textShadow: '1px 1px 3px rgba(0,0,0,0.2)'}}>Klondike</h1>
 
                     <div className="flex-grow flex justify-center items-center flex-wrap gap-x-6 gap-y-2">
                         <div className="relative group">
@@ -220,19 +219,23 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                                 Toggle between drawing 1 or 3 cards from the stock.
                             </div>
                         </div>
-                        <button onClick={handleUndo} disabled={history.length === 0} className={buttonClasses}>Undo</button>
-                        <div className="flex items-center gap-2 text-lg font-semibold tabular-nums">
-                            <span>Time: <span className="font-mono">{formatTime(time)}</span></span>
-                            <button onClick={() => setIsPaused(true)} className="text-yellow-400 hover:text-yellow-300" aria-label="Pause game">
-                               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 6a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1zm6 0a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1z" clipRule="evenodd" />
-                               </svg>
-                            </button>
-                            <span>Moves: {moves}</span>
-                        </div>
                     </div>
 
-                    <div className="w-24 hidden sm:block"></div>
+                    <div className="flex items-center gap-x-4 text-lg font-semibold">
+                         <button onClick={() => setIsPaused(true)} className="text-yellow-400 hover:text-yellow-300" aria-label="Pause game">
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 6a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1zm6 0a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1z" clipRule="evenodd" />
+                           </svg>
+                        </button>
+                        <div className="flex items-center gap-2 tabular-nums">
+                            <span className="text-white/80">Time:</span>
+                            <span className="font-mono w-[5ch] text-left">{formatTime(time)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 tabular-nums">
+                            <span className="text-white/80">Moves:</span>
+                            <span className="font-mono min-w-[4ch] text-left">{moves}</span>
+                        </div>
+                    </div>
                 </header>
 
                 <main ref={mainContainerRef} className="pt-4 flex-grow">
@@ -253,16 +256,17 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                                     return displayableWaste.map((card, index) => {
                                         const isInteractive = card.id === trueTopCard?.id;
                                         const offset = (displayableWaste.length - 1 - index) * 12;
+                                        const isPressed = !!pressedStack && pressedStack.source === 'waste' && pressedStack.sourcePileIndex === 0;
 
                                         return (
                                             <div key={card.id} className="absolute top-0" style={{left: `${offset}px`}}>
                                                 <Card 
                                                     card={card} 
-                                                    onMouseDown={(e) => isInteractive && handleMouseDown(e, [card], 'waste', 0, 0)}
+                                                    onMouseDown={(e) => isInteractive && handleMouseDown(e, 'waste', 0, 0)}
                                                     width={cardSize.width} 
                                                     height={cardSize.height}
                                                     isDragging={isInteractive && dragSourceInfo?.source === 'waste'}
-                                                    isPressed={isInteractive && pressedStack?.source === 'waste'}
+                                                    isPressed={isPressed}
                                                     isHinted={hint?.type === 'card' && hint.cardId === card.id}
                                                 />
                                             </div>
@@ -290,11 +294,11 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                                             <Card card={pile[pile.length - 2]} width={cardSize.width} height={cardSize.height}/>
                                         }
 
-                                        {pile.length > 0 && 
+                                        {topCard && 
                                             <div className="absolute top-0 left-0">
                                                 <Card 
                                                     card={topCard} 
-                                                    onMouseDown={(e) => handleMouseDown(e, [topCard], 'foundation', i, pile.length - 1)} 
+                                                    onMouseDown={(e) => handleMouseDown(e, 'foundation', i, pile.length - 1)} 
                                                     width={cardSize.width} 
                                                     height={cardSize.height}
                                                     isDragging={isTopCardDragging}
@@ -364,10 +368,10 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                                 dragSourceInfo.cards.length === pile.length;
 
                             return (
-                                <div key={pileIndex} className="relative" ref={el => { tableauRefs.current[pileIndex] = el; }}>
+                                <div key={pileIndex} className="relative" ref={el => { tableauRefs.current[pileIndex] = el; }} data-pile-id={`tableau-${pileIndex}`}>
                                     {(pile.length === 0 || areAllCardsInPileDragging) ? <EmptyPile width={cardSize.width} height={cardSize.height}/> :
                                         pile.map((card, cardIndex) => {
-                                            const isCardDragging = !!dragSourceInfo && dragSourceInfo.cards.some(c => c.id === card.id);
+                                            const isCardDragging = !!dragSourceInfo?.cards.some(c => c.id === card.id);
                                             const isCardPressed = !!pressedStack && 
                                                 pressedStack.source === 'tableau' && 
                                                 pressedStack.sourcePileIndex === pileIndex &&
@@ -378,7 +382,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                                             <Card
                                                 key={card.id}
                                                 card={card}
-                                                onMouseDown={(e) => handleMouseDown(e, pile.slice(cardIndex), 'tableau', pileIndex, cardIndex)}
+                                                onMouseDown={(e) => handleMouseDown(e, 'tableau', pileIndex, cardIndex)}
                                                 width={cardSize.width} height={cardSize.height}
                                                 style={{ position: 'absolute', top: `${cardTops[cardIndex]}px`, left: 0, zIndex: cardIndex + (isCardPressed ? 20 : 0) }}
                                                 isDragging={isCardDragging}
@@ -397,6 +401,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
             </div>
              <footer className={`w-full flex justify-center items-center gap-4 mt-auto pt-4 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
                 <button onClick={initializeGame} className={buttonClasses.replace('bg-green-700 hover:bg-green-600', 'bg-blue-600 hover:bg-blue-500')}>New Game</button>
+                <button onClick={handleUndo} disabled={history.length === 0} className={buttonClasses}>Undo</button>
                 <button onClick={handleHint} disabled={isDealing || isPaused || !!stockAnimationData || !!animationData} className={buttonClasses}>Hint</button>
                 <button onClick={() => setIsRulesModalOpen(true)} className={buttonClasses}>Rules</button>
                 <div className="relative group">

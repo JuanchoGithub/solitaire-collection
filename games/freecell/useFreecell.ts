@@ -2,8 +2,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { CardType, Theme } from '../../types';
 import { Suit, Rank } from '../../types';
-import type { GameState, DragInfo } from './types';
+import type { GameState } from './types';
 import { SUITS, RANKS, RANK_VALUE_MAP, CARD_ASPECT_RATIO, SUIT_COLOR_MAP, SUIT_SYMBOL_MAP } from '../../constants';
+import { useCardDrag } from '../../hooks/useCardDrag';
 
 type AnimationState = {
     cards: CardType[];
@@ -11,33 +12,14 @@ type AnimationState = {
     toRect: DOMRect;
     destinationType: 'tableau' | 'foundation' | 'freecell';
     destinationIndex: number;
-} | null;
-
-type ReturnAnimationData = {
-    cards: CardType[];
-    from: { x: number; y: number };
-    toRect: DOMRect;
-} | null;
-
-type DragGhostState = {
-    cards: CardType[];
-    x: number;
-    y: number;
-    offsetX: number;
-    offsetY: number;
-} | null;
-
-type InteractionState = {
-    startX: number;
-    startY: number;
-    cards: CardType[];
     source: 'tableau' | 'freecell';
     sourceIndex: number;
-    element: HTMLDivElement;
 } | null;
 
 type HintState = { type: 'card'; cardId: number } | null;
 
+type DragSource = 'tableau' | 'freecell';
+type DropTarget = 'tableau' | 'foundation' | 'freecell';
 
 interface UseFreecellProps {
     theme: Theme;
@@ -53,13 +35,8 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
     const [history, setHistory] = useState<GameState[]>([]);
 
     // UI & Interaction State
-    const [dragSourceInfo, setDragSourceInfo] = useState<DragInfo>(null);
-    const [dragGhost, setDragGhost] = useState<DragGhostState>(null);
-    const [interactionState, setInteractionState] = useState<InteractionState>(null);
     const [isWon, setIsWon] = useState(false);
     const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
-    // FIX: Update pressedStack state to include optional cardIndex for tableau stacks.
-    const [pressedStack, setPressedStack] = useState<{ source: 'tableau' | 'freecell', sourceIndex: number, cardIndex?: number } | null>(null);
     const [hint, setHint] = useState<HintState>(null);
     const [allHints, setAllHints] = useState<HintState[]>([]);
     const [hintIndex, setHintIndex] = useState<number>(-1);
@@ -68,6 +45,7 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
     const [moves, setMoves] = useState(0);
     const [time, setTime] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
+    const [autoplayMode, setAutoplayMode] = useState<'off' | 'auto' | 'win'>('auto');
 
     // Responsive Sizing
     const [cardSize, setCardSize] = useState({ width: 90, height: 126, faceUpStackOffset: 25 });
@@ -78,12 +56,12 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
     const [dealAnimationCards, setDealAnimationCards] = useState<{ card: CardType; style: React.CSSProperties; key: number }[]>([]);
     const [shuffleClass, setShuffleClass] = useState('');
     const [animationData, setAnimationData] = useState<AnimationState>(null);
-    const [returnAnimationData, setReturnAnimationData] = useState<ReturnAnimationData>(null);
     const [isAnimating, setIsAnimating] = useState(false);
     const [hiddenCardIds, setHiddenCardIds] = useState<number[]>([]);
     const [foundationFx, setFoundationFx] = useState<{ index: number; suit: Suit } | null>(null);
     const animationEndHandled = useRef(false);
     const hintTimeoutRef = useRef<number | null>(null);
+
 
     // Refs for positions
     const foundationRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -91,26 +69,170 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
     const freecellRefs = useRef<(HTMLDivElement | null)[]>([]);
     const initialDeckRef = useRef<HTMLDivElement | null>(null);
 
+    // Card Drag Engine
+    const { dragSourceInfo, dragGhost, returnAnimationData, pressedStack, handleMouseDown, handleReturnAnimationEnd } = useCardDrag<DragSource, DropTarget>({
+        isInteractionDisabled: isAnimating || isPaused || isDealing,
+        onDragStart: () => {
+            setHint(null);
+            if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+        },
+        getDraggableCards: (source, sourceIndex, sourceCardIndex) => {
+            if (source === 'tableau') {
+                const pile = tableau[sourceIndex];
+                const clickedCard = pile[sourceCardIndex];
+                if (!clickedCard) return null;
+
+                const stack = pile.slice(sourceCardIndex);
+                for (let i = 0; i < stack.length - 1; i++) {
+                    if (SUIT_COLOR_MAP[stack[i].suit] === SUIT_COLOR_MAP[stack[i+1].suit] || RANK_VALUE_MAP[stack[i].rank] !== RANK_VALUE_MAP[stack[i+1].rank] + 1) {
+                        return null; // Invalid stack
+                    }
+                }
+                const emptyFreecells = freecells.filter(c => c === null).length;
+                const emptyTableaus = tableau.filter(p => p.length === 0).length;
+                const maxMoveSize = (1 + emptyFreecells) * (2 ** emptyTableaus);
+                if (stack.length > maxMoveSize) return null;
+                return stack;
+
+            } else { // 'freecell'
+                const card = freecells[sourceIndex];
+                return card ? [card] : null;
+            }
+        },
+        findDropTarget: (x, y) => {
+            for (let i = 0; i < 4; i++) {
+                const fRect = foundationRefs.current[i]?.getBoundingClientRect();
+                if (fRect && x > fRect.left && x < fRect.right && y > fRect.top && y < fRect.bottom) return { type: 'foundation', index: i };
+                const cRect = freecellRefs.current[i]?.getBoundingClientRect();
+                if (cRect && x > cRect.left && x < cRect.right && y > cRect.top && y < cRect.bottom) return { type: 'freecell', index: i };
+            }
+            for (let i = tableauRefs.current.length - 1; i >= 0; i--) {
+                const el = tableauRefs.current[i];
+                if (el) {
+                    const rect = el.getBoundingClientRect();
+                    if (x > rect.left && x < rect.right && y > rect.top && y < rect.bottom) {
+                        return { type: 'tableau', index: i };
+                    }
+                }
+            }
+            return null;
+        },
+        onDrop: (dragInfo, target) => {
+            const { cards, source, sourcePileIndex } = dragInfo;
+            const card = cards[0];
+            let moveMade = false;
+            
+            const executeMove = (destType: DropTarget, destIndex: number) => {
+                saveStateToHistory();
+                setMoves(m => m + 1);
+                if (source === 'tableau') setTableau(prev => prev.map((p, i) => i === sourcePileIndex ? p.slice(0, -cards.length) : p));
+                else setFreecells(prev => prev.map((c, i) => i === sourcePileIndex ? null : c));
+
+                if (destType === 'tableau') setTableau(prev => prev.map((p, i) => i === destIndex ? [...p, ...cards] : p));
+                else if (destType === 'foundation') {
+                    setFoundations(prev => prev.map((p, i) => i === destIndex ? [...p, ...cards] : p));
+                    setFoundationFx({ index: destIndex, suit: cards[0].suit });
+                    setTimeout(() => setFoundationFx(null), 1000);
+                } else setFreecells(prev => prev.map((c, i) => i === destIndex ? cards[0] : c));
+                moveMade = true;
+            };
+
+            if (target.type === 'foundation' && cards.length === 1) {
+                const fPile = foundations[target.index];
+                const topCard = fPile[fPile.length - 1];
+                if (card.suit === SUITS[target.index] && ((!topCard && card.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[topCard.rank] + 1))) {
+                    executeMove('foundation', target.index);
+                }
+            } else if (target.type === 'freecell' && cards.length === 1 && freecells[target.index] === null) {
+                executeMove('freecell', target.index);
+            } else if (target.type === 'tableau') {
+                const tPile = tableau[target.index];
+                const topCard = tPile[tPile.length - 1];
+                if ((!topCard) || (SUIT_COLOR_MAP[card.suit] !== SUIT_COLOR_MAP[topCard.suit] && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[topCard.rank] - 1)) {
+                    executeMove('tableau', target.index);
+                }
+            }
+            return moveMade;
+        },
+        onClick: (source, sourceIndex, sourceCardIndex, cards, element) => {
+            if (cards.length !== 1) return;
+            setHint(null);
+            if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+            const card = cards[0];
+            
+            const triggerAnimation = (destinationType: 'foundation' | 'tableau' | 'freecell', destinationIndex: number, toRect: DOMRect) => {
+                animationEndHandled.current = false;
+                setHiddenCardIds(cards.map(c => c.id));
+                setAnimationData({ cards, fromRect: element.getBoundingClientRect(), toRect, destinationType, destinationIndex, source, sourceIndex });
+                setIsAnimating(true);
+            };
+
+            // Priority 1: Move to Foundation
+            const fIndex = SUITS.indexOf(card.suit);
+            const fPile = foundations[fIndex];
+            const topFoundationCard = fPile[fPile.length - 1];
+            if ((!topFoundationCard && card.rank === Rank.ACE) || (topFoundationCard && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[topFoundationCard.rank] + 1)) {
+                const toRect = foundationRefs.current[fIndex]?.getBoundingClientRect();
+                if (toRect) {
+                    triggerAnimation('foundation', fIndex, toRect);
+                    return;
+                }
+            }
+            
+            // Priority 2: Move to another Tableau pile (building on a card)
+            for (let i = 0; i < tableau.length; i++) {
+                if (source === 'tableau' && sourceIndex === i) continue;
+                const destPile = tableau[i];
+                const topTableauCard = destPile[destPile.length - 1];
+                if (topTableauCard && SUIT_COLOR_MAP[card.suit] !== SUIT_COLOR_MAP[topTableauCard.suit] && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[topTableauCard.rank] - 1) {
+                    const toEl = tableauRefs.current[i];
+                    if (toEl) {
+                        const parentRect = toEl.getBoundingClientRect();
+                        const topOffset = destPile.length * cardSize.faceUpStackOffset;
+                        const toRect = new DOMRect(parentRect.x, parentRect.y + topOffset, cardSize.width, cardSize.height);
+                        triggerAnimation('tableau', i, toRect);
+                        return;
+                    }
+                }
+            }
+            
+            // Priority 3: Move to an empty Tableau pile
+            const emptyTableauIndex = tableau.findIndex((p, i) => p.length === 0 && !(source === 'tableau' && sourceIndex === i));
+            if (emptyTableauIndex !== -1) {
+                const toEl = tableauRefs.current[emptyTableauIndex];
+                if (toEl) {
+                    const toRect = toEl.getBoundingClientRect();
+                    triggerAnimation('tableau', emptyTableauIndex, toRect);
+                    return;
+                }
+            }
+
+            // Priority 4 (Last Resort): Move to an empty freecell (if from tableau)
+            if (source === 'tableau') {
+                const emptyCellIndex = freecells.findIndex(c => c === null);
+                if (emptyCellIndex !== -1) {
+                    const toRect = freecellRefs.current[emptyCellIndex]?.getBoundingClientRect();
+                    if (toRect) {
+                        triggerAnimation('freecell', emptyCellIndex, toRect);
+                        return;
+                    }
+                }
+            }
+        },
+    });
+
      const updateCardSize = useCallback(() => {
         if (!mainContainerRef.current) return;
-
         const containerWidth = mainContainerRef.current.clientWidth;
         const numPiles = 8;
         const gap = 12;
         const minCardWidth = 60;
         const maxCardWidth = 95;
-
         const totalGapWidth = (numPiles - 1) * gap;
         let newCardWidth = (containerWidth - totalGapWidth) / numPiles;
-        
         newCardWidth = Math.max(minCardWidth, Math.min(newCardWidth, maxCardWidth));
         const newCardHeight = newCardWidth * CARD_ASPECT_RATIO;
-
-        setCardSize({
-            width: newCardWidth,
-            height: newCardHeight,
-            faceUpStackOffset: newCardHeight / 5.0,
-        });
+        setCardSize({ width: newCardWidth, height: newCardHeight, faceUpStackOffset: newCardHeight / 5.0 });
     }, []);
 
     useEffect(() => {
@@ -119,30 +241,22 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
         return () => window.removeEventListener('resize', updateCardSize);
     }, [updateCardSize]);
 
-
     const initializeGame = useCallback(() => {
         setIsWon(false);
-        setDragSourceInfo(null);
-        setDragGhost(null);
-        setInteractionState(null);
         setIsRulesModalOpen(false);
         setAnimationData(null);
-        setReturnAnimationData(null);
         setIsAnimating(false);
         setHiddenCardIds([]);
-        setPressedStack(null);
         setHint(null);
         setMoves(0);
         setTime(0);
         setHistory([]);
         setIsPaused(false);
-
         setTableau(Array.from({ length: 8 }, () => []));
         setFreecells(Array(4).fill(null));
         setFoundations([[], [], [], []]);
         setDealAnimationCards([]);
         setShuffleClass('');
-        
         setIsDealing(true);
     }, []);
 
@@ -159,19 +273,14 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
                 [fullDeck[i], fullDeck[j]] = [fullDeck[j], fullDeck[i]];
             }
             const deckForState = [...fullDeck];
-
             setShuffleClass('perform-shuffle');
             const dealStartTime = 800;
             const flyingCards: typeof dealAnimationCards = [];
             let dealDelay = 0;
             const dealStagger = 15;
             const fromRect = initialDeckRef.current.getBoundingClientRect();
-
             const finalTableau: CardType[][] = Array.from({ length: 8 }, () => []);
-            deckForState.forEach((card, i) => {
-                finalTableau[i % 8].push(card);
-            });
-
+            deckForState.forEach((card, i) => finalTableau[i % 8].push(card));
             finalTableau.forEach((pile, pileIndex) => {
                 pile.forEach((card, cardIndex) => {
                     const toEl = tableauRefs.current[pileIndex];
@@ -179,13 +288,9 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
                         const toRect = toEl.getBoundingClientRect();
                         const topOffset = cardIndex * cardSize.faceUpStackOffset;
                         flyingCards.push({
-                            card,
-                            key: card.id,
-                            style: {
-                                '--from-top': `${fromRect.top}px`,
-                                '--from-left': `${fromRect.left}px`,
-                                '--to-top': `${toRect.top + topOffset}px`,
-                                '--to-left': `${toRect.left}px`,
+                            card, key: card.id, style: {
+                                '--from-top': `${fromRect.top}px`, '--from-left': `${fromRect.left}px`,
+                                '--to-top': `${toRect.top + topOffset}px`, '--to-left': `${toRect.left}px`,
                                 animationDelay: `${dealStartTime + dealDelay}ms`,
                             } as React.CSSProperties
                         });
@@ -193,9 +298,7 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
                     }
                 });
             });
-
             setDealAnimationCards(flyingCards);
-
             setTimeout(() => {
                 setTableau(finalTableau);
                 setIsDealing(false);
@@ -204,25 +307,68 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
                 setTime(0);
             }, dealStartTime + dealDelay + 400);
         }
-    }, [isDealing, cardSize.width]);
+    }, [isDealing, cardSize.width, cardSize.faceUpStackOffset]);
 
     useEffect(() => {
-        if (foundations.flat().length === 52) {
-            setIsWon(true);
-        }
+        if (foundations.flat().length === 52) setIsWon(true);
     }, [foundations]);
 
      useEffect(() => {
-        if (isPaused || isWon || isAnimating || isDealing) {
-            return;
-        }
-        const timerId = setInterval(() => {
-            setTime(prevTime => prevTime + 1);
-        }, 1000);
-
+        if (isPaused || isWon || isAnimating || isDealing) return;
+        const timerId = setInterval(() => setTime(prevTime => prevTime + 1), 1000);
         return () => clearInterval(timerId);
     }, [isPaused, isWon, isAnimating, isDealing]);
 
+    // Autoplay Logic
+    useEffect(() => {
+        if (autoplayMode === 'off' || isPaused || isAnimating || isDealing || dragGhost || isWon) return;
+        const executeAutoMove = (card: CardType, source: 'freecell' | 'tableau', sourceIndex: number, destinationType: 'foundation', destinationIndex: number) => {
+            const sourceEl = document.querySelector(`[data-card-id="${card.id}"]`);
+            const destEl = foundationRefs.current[destinationIndex];
+            if (!sourceEl || !destEl) return false;
+            animationEndHandled.current = false;
+            setHiddenCardIds([card.id]);
+            setAnimationData({
+                cards: [card], fromRect: sourceEl.getBoundingClientRect(), toRect: destEl.getBoundingClientRect(),
+                destinationType, destinationIndex, source, sourceIndex
+            });
+            setIsAnimating(true);
+            return true;
+        };
+        const findAndExecuteFoundationMove = (): boolean => {
+            for (let i = 0; i < freecells.length; i++) {
+                const card = freecells[i];
+                if (card) {
+                    const fIndex = SUITS.indexOf(card.suit);
+                    const fPile = foundations[fIndex];
+                    const topCard = fPile.length > 0 ? fPile[fPile.length - 1] : null;
+                    if ((!topCard && card.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
+                        if (executeAutoMove(card, 'freecell', i, 'foundation', fIndex)) return true;
+                    }
+                }
+            }
+            for (let i = 0; i < tableau.length; i++) {
+                const pile = tableau[i];
+                const card = pile.length > 0 ? pile[pile.length - 1] : null;
+                if (card) {
+                    const fIndex = SUITS.indexOf(card.suit);
+                    const fPile = foundations[fIndex];
+                    const topCard = fPile.length > 0 ? fPile[fPile.length - 1] : null;
+                    if ((!topCard && card.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
+                        if (executeAutoMove(card, 'tableau', i, 'foundation', fIndex)) return true;
+                    }
+                }
+            }
+            return false;
+        };
+        if (autoplayMode === 'auto') {
+            const timeoutId = setTimeout(findAndExecuteFoundationMove, 200);
+            return () => clearTimeout(timeoutId);
+        } else if (autoplayMode === 'win') {
+            const intervalId = setInterval(() => { if (!findAndExecuteFoundationMove()) clearInterval(intervalId); }, 100);
+            return () => clearInterval(intervalId);
+        }
+    }, [autoplayMode, tableau, freecells, foundations, isPaused, isAnimating, isDealing, dragGhost, isWon]);
 
     const saveStateToHistory = () => {
         setHistory(prev => [...prev, { freecells, foundations, tableau, moves }]);
@@ -238,197 +384,157 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
         setHistory(prev => prev.slice(0, -1));
     };
 
-    const handleHint = useCallback(() => {
-        // Simple hint logic for now: find any valid move.
-        // TODO: A more advanced hint system could be implemented.
-        for (const [cellIndex, card] of freecells.entries()) {
-            if (card) {
-                // Check foundations
-                const fIndex = SUITS.indexOf(card.suit);
-                const fTop = foundations[fIndex][foundations[fIndex].length - 1];
-                if ((!fTop && card.rank === Rank.ACE) || (fTop && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[fTop.rank] + 1)) {
-                    setHint({ type: 'card', cardId: card.id });
-                    setTimeout(() => setHint(null), 2000);
-                    return;
-                }
-            }
-        }
+    const handleAutoplayModeToggle = () => setAutoplayMode(prev => prev === 'off' ? 'auto' : prev === 'auto' ? 'win' : 'off');
 
-        for (const [pileIndex, pile] of tableau.entries()) {
-            const card = pile[pile.length - 1];
-            if (card) {
-                 // Check foundations
-                const fIndex = SUITS.indexOf(card.suit);
-                const fTop = foundations[fIndex][foundations[fIndex].length - 1];
-                if ((!fTop && card.rank === Rank.ACE) || (fTop && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[fTop.rank] + 1)) {
-                    setHint({ type: 'card', cardId: card.id });
-                    setTimeout(() => setHint(null), 2000);
-                    return;
-                }
-            }
-        }
-    }, [freecells, foundations, tableau]);
+    const findAllHints = useCallback((): HintState[] => {
+        const hints: { hint: HintState, priority: number }[] = [];
+        const hintedCardIds = new Set<number>();
 
-    const handleMouseDown = (
-        e: React.MouseEvent<HTMLDivElement>,
-        cards: CardType[],
-        source: 'tableau' | 'freecell',
-        sourceIndex: number
-    ) => {
-        if (isAnimating || isPaused || e.button !== 0 || isDealing) return;
-        e.preventDefault();
-
-        let cardIndexInPile: number | undefined;
-        if (source === 'tableau') {
-            const pile = tableau[sourceIndex];
-            const clickedCardIndex = pile.findIndex(c => c.id === cards[0].id);
-            cardIndexInPile = clickedCardIndex;
-
-            // Check if stack is valid
-            for (let i = clickedCardIndex; i < pile.length - 1; i++) {
-                if (SUIT_COLOR_MAP[pile[i].suit] === SUIT_COLOR_MAP[pile[i+1].suit] || RANK_VALUE_MAP[pile[i].rank] !== RANK_VALUE_MAP[pile[i+1].rank] + 1) {
-                    return; // Invalid stack
-                }
-            }
-
-            // Check if stack size is movable
-            const emptyFreecells = freecells.filter(c => c === null).length;
-            const emptyTableaus = tableau.filter(p => p.length === 0).length;
-            const maxMoveSize = (1 + emptyFreecells) * (2 ** emptyTableaus);
-
-            if (cards.length > maxMoveSize) {
-                return; // Stack too large to move
-            }
-        }
-
-        setPressedStack({ source, sourceIndex, cardIndex: cardIndexInPile });
-        setHint(null);
-        setInteractionState({
-            startX: e.clientX,
-            startY: e.clientY,
-            cards,
-            source,
-            sourceIndex,
-            element: e.currentTarget,
-        });
-    };
-    
-    const handleMouseMove = useCallback((e: MouseEvent) => {
-        if (!interactionState) return;
-
-        if (dragGhost) {
-            setDragGhost(g => g ? { ...g, x: e.clientX - g.offsetX, y: e.clientY - g.offsetY } : null);
-            return;
-        }
-
-        if (Math.hypot(e.clientX - interactionState.startX, e.clientY - interactionState.startY) > 5) {
-            setPressedStack(null);
-            setDragSourceInfo({ cards: interactionState.cards, source: interactionState.source, sourceIndex: interactionState.sourceIndex });
-            const rect = interactionState.element.getBoundingClientRect();
-            setDragGhost({
-                cards: interactionState.cards,
-                x: e.clientX - (interactionState.startX - rect.left),
-                y: e.clientY - (interactionState.startY - rect.top),
-                offsetX: interactionState.startX - rect.left,
-                offsetY: interactionState.startY - rect.top,
-            });
-        }
-    }, [interactionState, dragGhost]);
-
-    const handleMouseUp = useCallback((e: MouseEvent) => {
-        if (!interactionState) return;
-        setPressedStack(null);
-        const { cards, source, sourceIndex } = interactionState;
-
-        const moveCards = (
-            destType: 'tableau' | 'foundation' | 'freecell',
-            destIndex: number
-        ) => {
-            saveStateToHistory();
-            setMoves(m => m + 1);
-
-            // Remove from source
-            if (source === 'tableau') {
-                setTableau(prev => prev.map((p, i) => i === sourceIndex ? p.slice(0, -cards.length) : p));
-            } else { // freecell
-                setFreecells(prev => prev.map((c, i) => i === sourceIndex ? null : c));
-            }
-
-            // Add to destination
-            if (destType === 'tableau') {
-                setTableau(prev => prev.map((p, i) => i === destIndex ? [...p, ...cards] : p));
-            } else if (destType === 'foundation') {
-                setFoundations(prev => prev.map((p, i) => i === destIndex ? [...p, ...cards] : p));
-                setFoundationFx({ index: destIndex, suit: cards[0].suit });
-                setTimeout(() => setFoundationFx(null), 1000);
-            } else { // freecell
-                setFreecells(prev => prev.map((c, i) => i === destIndex ? cards[0] : c));
+        const addHint = (cardId: number, priority: number) => {
+            if (!hintedCardIds.has(cardId)) {
+                hints.push({ hint: { type: 'card', cardId }, priority });
+                hintedCardIds.add(cardId);
             }
         };
 
-        if (dragGhost) {
-            const findDropTarget = (x: number, y: number): { type: 'tableau' | 'foundation' | 'freecell', index: number } | null => {
-                for (let i = 0; i < 4; i++) {
-                    const fRect = foundationRefs.current[i]?.getBoundingClientRect();
-                    if (fRect && x > fRect.left && x < fRect.right && y > fRect.top && y < fRect.bottom) return { type: 'foundation', index: i };
-                    const cRect = freecellRefs.current[i]?.getBoundingClientRect();
-                    if (cRect && x > cRect.left && x < cRect.right && y > cRect.top && y < cRect.bottom) return { type: 'freecell', index: i };
+        // --- Find all possible moves ---
+        
+        // 1. Tableau/Freecell to Foundation (Priority 0)
+        let foundationChanged = true;
+        const tempFoundations = foundations.map(p => [...p]);
+        while (foundationChanged) {
+            foundationChanged = false;
+            const checkAndAddFoundationMove = (card: CardType) => {
+                const fIndex = SUITS.indexOf(card.suit);
+                const fPile = tempFoundations[fIndex];
+                const topCard = fPile[fPile.length - 1];
+                if ((!topCard && card.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
+                    if (!tempFoundations.flat().some(c => c.id === card.id)) {
+                        addHint(card.id, 0);
+                        fPile.push(card);
+                        foundationChanged = true;
+                    }
                 }
-                for (let i = tableauRefs.current.length - 1; i >= 0; i--) {
-                    const tRect = tableauRefs.current[i]?.getBoundingClientRect();
-                    if (tRect && x > tRect.left && x < tRect.right && y > tRect.top && y < tRect.bottom) return { type: 'tableau', index: i };
-                }
-                return null;
             };
+            freecells.forEach(card => card && checkAndAddFoundationMove(card));
+            tableau.forEach(pile => pile.length > 0 && checkAndAddFoundationMove(pile[pile.length - 1]));
+        }
 
-            const target = findDropTarget(e.clientX, e.clientY);
-            let moveMade = false;
+        // 2. Other moves (Priorities 1 and 2)
+        const emptyFreecells = freecells.filter(c => c === null).length;
+        
+        // From Tableau
+        for (let sourcePileIndex = 0; sourcePileIndex < tableau.length; sourcePileIndex++) {
+            const sourcePile = tableau[sourcePileIndex];
+            if (sourcePile.length === 0) continue;
 
-            if (target) {
-                const card = cards[0];
-                if (target.type === 'foundation' && cards.length === 1) {
-                    const fPile = foundations[target.index];
-                    const topCard = fPile[fPile.length - 1];
-                    if (card.suit === SUITS[target.index] && ((!topCard && card.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[topCard.rank] + 1))) {
-                        moveCards('foundation', target.index);
-                        moveMade = true;
+            for (let cardIndex = sourcePile.length - 1; cardIndex >= 0; cardIndex--) {
+                const stack = sourcePile.slice(cardIndex);
+                let isStackValid = true;
+                for(let k = 0; k < stack.length - 1; k++) {
+                    if(SUIT_COLOR_MAP[stack[k].suit] === SUIT_COLOR_MAP[stack[k+1].suit] || RANK_VALUE_MAP[stack[k].rank] !== RANK_VALUE_MAP[stack[k+1].rank] + 1) {
+                        isStackValid = false;
+                        break;
                     }
-                } else if (target.type === 'freecell' && cards.length === 1 && freecells[target.index] === null) {
-                    moveCards('freecell', target.index);
-                    moveMade = true;
-                } else if (target.type === 'tableau') {
-                    const tPile = tableau[target.index];
-                    const topCard = tPile[tPile.length - 1];
-                    if ((!topCard) || (SUIT_COLOR_MAP[card.suit] !== SUIT_COLOR_MAP[topCard.suit] && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[topCard.rank] - 1)) {
-                        moveCards('tableau', target.index);
-                        moveMade = true;
+                }
+                if (!isStackValid) continue;
+
+                const cardToMove = stack[0];
+
+                // To other Tableau piles
+                for (let destPileIndex = 0; destPileIndex < tableau.length; destPileIndex++) {
+                     if (sourcePileIndex === destPileIndex) continue;
+                    const destPile = tableau[destPileIndex];
+                    const emptyTableaus = tableau.filter(p => p.length === 0).length;
+                    const emptyTableausForMove = destPile.length === 0 ? Math.max(0, emptyTableaus - 1) : emptyTableaus;
+                    const maxMoveSize = (1 + emptyFreecells) * (2 ** emptyTableausForMove);
+                    
+                    if (stack.length > maxMoveSize) continue;
+
+                    const topDestCard = destPile[destPile.length - 1];
+                    if (!topDestCard || (SUIT_COLOR_MAP[cardToMove.suit] !== SUIT_COLOR_MAP[topDestCard.suit] && RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1)) {
+                        addHint(cardToMove.id, 1);
+                    }
+                }
+
+                // To Freecell (only top card of a stack)
+                if (stack.length === 1 && emptyFreecells > 0) {
+                     addHint(cardToMove.id, 2);
+                }
+            }
+        }
+
+        // From Freecells to Tableau
+        for (const card of freecells) {
+            if (card) {
+                for (const pile of tableau) {
+                    const topCard = pile[pile.length - 1];
+                     if (!topCard || (SUIT_COLOR_MAP[card.suit] !== SUIT_COLOR_MAP[topCard.suit] && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[topCard.rank] - 1)) {
+                        addHint(card.id, 1);
                     }
                 }
             }
-            if (!moveMade) {
-                 setReturnAnimationData({ cards, from: { x: dragGhost.x, y: dragGhost.y }, toRect: interactionState.element.getBoundingClientRect() });
-            }
+        }
+
+        return hints.sort((a, b) => a.priority - b.priority).map(item => item.hint!);
+
+    }, [freecells, foundations, tableau]);
+
+    const handleHint = useCallback(() => {
+        if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+        let currentHints = allHints;
+        let currentIdx = hintIndex;
+
+        if (currentIdx === -1 || currentHints.length === 0) {
+            currentHints = findAllHints();
+            setAllHints(currentHints);
+            currentIdx = 0;
+        } else {
+            currentIdx = (currentIdx + 1) % (currentHints.length || 1);
+        }
+        setHintIndex(currentIdx);
+        
+        if (currentHints.length > 0) {
+            const foundHint = currentHints[currentIdx];
+            setHint(foundHint);
+            hintTimeoutRef.current = window.setTimeout(() => {
+                setHint(null);
+                setHintIndex(-1);
+                setAllHints([]);
+            }, 3000);
+        } else {
+            setHint(null);
+            setHintIndex(-1);
+            setAllHints([]);
+        }
+    }, [allHints, hintIndex, findAllHints]);
+    
+    const handleAnimationEnd = () => {
+        if (!animationData || animationEndHandled.current) return;
+        animationEndHandled.current = true;
+        saveStateToHistory();
+        setMoves(m => m + 1);
+        const { cards, destinationType, destinationIndex, source, sourceIndex } = animationData;
+        
+        if (source === 'tableau') {
+            setTableau(prev => prev.map((p, i) => i === sourceIndex ? p.slice(0, p.length - cards.length) : p));
+        } else { // source === 'freecell'
+            setFreecells(prev => prev.map((c, i) => i === sourceIndex ? null : c));
         }
         
-        setInteractionState(null);
-        setDragGhost(null);
-        setDragSourceInfo(null);
-    }, [interactionState, dragGhost, tableau, foundations, freecells]);
-    
-    useEffect(() => {
-        if (interactionState) {
-            window.addEventListener('mousemove', handleMouseMove);
-            window.addEventListener('mouseup', handleMouseUp, { once: true });
-            return () => {
-                window.removeEventListener('mousemove', handleMouseMove);
-                window.removeEventListener('mouseup', handleMouseUp);
-            };
+        if (destinationType === 'foundation') {
+            setFoundations(prev => prev.map((p, i) => i === destinationIndex ? [...p, ...cards] : p));
+            setFoundationFx({ index: destinationIndex, suit: cards[0].suit });
+            setTimeout(() => setFoundationFx(null), 1000);
+        } else if (destinationType === 'freecell') {
+            setFreecells(prev => prev.map((c, i) => i === destinationIndex ? cards[0] : c));
+        } else if (destinationType === 'tableau') {
+            setTableau(prev => prev.map((p, i) => i === destinationIndex ? [...p, ...cards] : p));
         }
-    }, [interactionState, handleMouseMove, handleMouseUp]);
-    
-    const handleReturnAnimationEnd = () => {
-        setReturnAnimationData(null);
-        setDragSourceInfo(null);
+
+        setAnimationData(null);
+        setIsAnimating(false);
+        setHiddenCardIds([]);
     };
 
     const formatTime = (totalSeconds: number) => {
@@ -438,19 +544,12 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
     };
 
     return {
-        // State
-        freecells, foundations, tableau, history, isWon, isRulesModalOpen, pressedStack, hint, moves, time, isPaused,
-        // UI State
+        freecells, foundations, tableau, history, isWon, isRulesModalOpen, pressedStack, hint, moves, time, isPaused, autoplayMode,
         cardSize, shuffleClass, isDealing,
-        // Animations
         dealAnimationCards, animationData, returnAnimationData, dragGhost, dragSourceInfo, hiddenCardIds, foundationFx,
-        // Handlers
-        initializeGame, handleUndo, handleHint, setIsRulesModalOpen, setIsPaused, handleMouseDown, handleReturnAnimationEnd,
-        // Refs
+        initializeGame, handleUndo, handleHint, setIsRulesModalOpen, setIsPaused, handleMouseDown, handleReturnAnimationEnd, handleAnimationEnd, handleAutoplayModeToggle,
         mainContainerRef, foundationRefs, tableauRefs, freecellRefs, initialDeckRef,
-        // Theme Components
         Board, Card,
-        // Helpers
         formatTime,
     };
 };

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { SpiderController } from '../games/spider/useSpider';
 import EmptyPile from './EmptyPile';
@@ -199,21 +198,24 @@ const SpiderGameBoard: React.FC<SpiderGameBoardProps> = ({ controller, onTitleCl
             )}
 
             <div className="max-w-7xl mx-auto w-full flex flex-col h-full">
-                <header className={`flex flex-wrap justify-between items-center gap-4 mb-4 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
-                    <h1 onClick={onTitleClick} className="text-3xl sm:text-4xl font-bold tracking-wider cursor-pointer hover:text-green-300 transition-colors">{titleText}</h1>
-                     <div className="flex-grow flex justify-center items-center flex-wrap gap-x-6 gap-y-2">
-                        <button onClick={handleUndo} disabled={history.length === 0} className={buttonClasses}>Undo</button>
-                        <div className="flex items-center gap-2 text-lg font-semibold tabular-nums">
-                            <span>Time: <span className="font-mono">{formatTime(time)}</span></span>
-                            <button onClick={() => setIsPaused(true)} className="text-yellow-400 hover:text-yellow-300" aria-label="Pause game">
-                               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 6a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1zm6 0a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1z" clipRule="evenodd" />
-                               </svg>
-                            </button>
-                            <span>Moves: {moves}</span>
+                <header className={`flex flex-wrap justify-between items-center gap-4 mb-2 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
+                    <h1 onClick={onTitleClick} className="text-2xl sm:text-3xl font-serif tracking-wider cursor-pointer hover:text-green-300 transition-colors" style={{ textShadow: '1px 1px 3px rgba(0,0,0,0.2)'}}>{titleText}</h1>
+                    <div className="flex-grow"></div>
+                    <div className="flex items-center gap-x-4 text-lg font-semibold">
+                         <button onClick={() => setIsPaused(true)} className="text-yellow-400 hover:text-yellow-300" aria-label="Pause game">
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 6a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1zm6 0a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1z" clipRule="evenodd" />
+                           </svg>
+                        </button>
+                        <div className="flex items-center gap-2 tabular-nums">
+                            <span className="text-white/80">Time:</span>
+                            <span className="font-mono w-[5ch] text-left">{formatTime(time)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 tabular-nums">
+                            <span className="text-white/80">Moves:</span>
+                            <span className="font-mono min-w-[4ch] text-left">{moves}</span>
                         </div>
                     </div>
-                    <div className="w-24 hidden sm:block"></div>
                 </header>
                 
                 <main ref={mainContainerRef} className="pt-4 flex-grow">
@@ -226,11 +228,11 @@ const SpiderGameBoard: React.FC<SpiderGameBoardProps> = ({ controller, onTitleCl
                                 : cardSize.height;
                             
                             return (
-                                <div key={pileIndex} className="relative" ref={el => { tableauRefs.current[pileIndex] = el; }}>
+                                <div key={pileIndex} className="relative" ref={el => { tableauRefs.current[pileIndex] = el; }} data-pile-id={`tableau-${pileIndex}`}>
                                     <EmptyPile width={cardSize.width} height={cardSize.height}/>
                                     <div style={{ position: 'absolute', top: 0, left: 0 }}>
                                     {pile.map((card, cardIndex) => {
-                                            const isCardDragging = !!dragSourceInfo && dragSourceInfo.cards.some(c => c.id === card.id);
+                                            const isCardDragging = !!dragSourceInfo?.cards.some(c => c.id === card.id);
                                             const isCardPressed = !!pressedStack && 
                                                 pressedStack.sourcePileIndex === pileIndex &&
                                                 cardIndex >= pressedStack.sourceCardIndex;
@@ -242,7 +244,7 @@ const SpiderGameBoard: React.FC<SpiderGameBoardProps> = ({ controller, onTitleCl
                                             <Card
                                                 key={card.id}
                                                 card={card}
-                                                onMouseDown={(e) => handleMouseDown(e, pileIndex, cardIndex)}
+                                                onMouseDown={(e) => handleMouseDown(e, 'tableau', pileIndex, cardIndex)}
                                                 width={cardSize.width} height={cardSize.height}
                                                 style={{ position: 'absolute', top: `${topOffset}px`, left: 0, zIndex: cardIndex + (isCardPressed ? 20 : 0) }}
                                                 isDragging={isCardDragging}
@@ -262,6 +264,7 @@ const SpiderGameBoard: React.FC<SpiderGameBoardProps> = ({ controller, onTitleCl
              <footer className={`w-full flex justify-between items-center gap-4 mt-auto p-4 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
                 <div className="flex gap-4">
                     <button onClick={initializeGame} className={buttonClasses.replace('bg-green-700 hover:bg-green-600', 'bg-blue-600 hover:bg-blue-500')}>New Game</button>
+                    <button onClick={handleUndo} disabled={history.length === 0} className={buttonClasses}>Undo</button>
                     <button onClick={handleHint} className={buttonClasses}>Hint</button>
                     <button onClick={() => setIsRulesModalOpen(true)} className={buttonClasses}>Rules</button>
                     <button onClick={onSettingsClick} className={iconButtonClasses} aria-label="Settings">

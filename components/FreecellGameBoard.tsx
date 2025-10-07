@@ -1,4 +1,3 @@
-
 import React from 'react';
 import type { FreecellController } from '../games/freecell/useFreecell';
 import EmptyPile from './EmptyPile';
@@ -17,9 +16,9 @@ interface FreecellGameBoardProps {
 
 const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTitleClick, onSettingsClick }) => {
     const {
-        Board, Card, freecells, foundations, tableau, history, isWon, isRulesModalOpen, pressedStack, hint, moves, time, isPaused,
+        Board, Card, freecells, foundations, tableau, history, isWon, isRulesModalOpen, pressedStack, hint, moves, time, isPaused, autoplayMode,
         cardSize, shuffleClass, isDealing, dealAnimationCards, animationData, returnAnimationData, dragGhost, dragSourceInfo, hiddenCardIds, foundationFx,
-        initializeGame, handleUndo, handleHint, setIsRulesModalOpen, setIsPaused, handleMouseDown, handleReturnAnimationEnd,
+        initializeGame, handleUndo, handleHint, setIsRulesModalOpen, setIsPaused, handleMouseDown, handleReturnAnimationEnd, handleAnimationEnd, handleAutoplayModeToggle,
         mainContainerRef, foundationRefs, tableauRefs, freecellRefs, initialDeckRef, formatTime
     } = controller;
     
@@ -37,6 +36,25 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
                     <Card card={card} width={cardSize.width} height={cardSize.height} />
                 </div>
              ))}
+            
+            {animationData && (
+                <div
+                    className="auto-move-card"
+                    style={{
+                        position: 'fixed',
+                        width: `${animationData.fromRect.width}px`,
+                        height: `${animationData.fromRect.height}px`,
+                        top: `${animationData.fromRect.top}px`,
+                        left: `${animationData.fromRect.left}px`,
+                        zIndex: 100,
+                        '--translateX': `${animationData.toRect.left - animationData.fromRect.left}px`,
+                        '--translateY': `${animationData.toRect.top - animationData.fromRect.top}px`,
+                    } as React.CSSProperties}
+                    onAnimationEnd={handleAnimationEnd}
+                >
+                    <Card card={animationData.cards[0]} width={cardSize.width} height={cardSize.height}/>
+                </div>
+            )}
 
             {isDealing && (
                 <div 
@@ -116,42 +134,47 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
             )}
 
             <div className="max-w-7xl mx-auto w-full flex flex-col h-full">
-                <header className={`flex flex-wrap justify-between items-center gap-4 mb-4 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
-                    <h1 onClick={onTitleClick} className="text-3xl sm:text-4xl font-bold tracking-wider cursor-pointer hover:text-green-300 transition-colors">Freecell</h1>
-
-                    <div className="flex-grow flex justify-center items-center flex-wrap gap-x-6 gap-y-2">
-                        <button onClick={handleUndo} disabled={history.length === 0} className={buttonClasses}>Undo</button>
-                        <div className="flex items-center gap-2 text-lg font-semibold tabular-nums">
-                            <span>Time: <span className="font-mono">{formatTime(time)}</span></span>
-                            <button onClick={() => setIsPaused(true)} className="text-yellow-400 hover:text-yellow-300" aria-label="Pause game">
-                               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 6a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1zm6 0a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1z" clipRule="evenodd" />
-                               </svg>
-                            </button>
-                            <span>Moves: {moves}</span>
+                <header className={`flex flex-wrap justify-between items-center gap-4 mb-2 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
+                    <h1 onClick={onTitleClick} className="text-2xl sm:text-3xl font-serif tracking-wider cursor-pointer hover:text-green-300 transition-colors" style={{ textShadow: '1px 1px 3px rgba(0,0,0,0.2)'}}>Freecell</h1>
+                    <div className="flex-grow"></div>
+                    <div className="flex items-center gap-x-4 text-lg font-semibold">
+                         <button onClick={() => setIsPaused(true)} className="text-yellow-400 hover:text-yellow-300" aria-label="Pause game">
+                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 6a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1zm6 0a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1z" clipRule="evenodd" />
+                           </svg>
+                        </button>
+                        <div className="flex items-center gap-2 tabular-nums">
+                            <span className="text-white/80">Time:</span>
+                            <span className="font-mono w-[5ch] text-left">{formatTime(time)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 tabular-nums">
+                            <span className="text-white/80">Moves:</span>
+                            <span className="font-mono min-w-[4ch] text-left">{moves}</span>
                         </div>
                     </div>
-                     <div className="w-24 hidden sm:block"></div>
                 </header>
 
                 <main ref={mainContainerRef} className="pt-4 flex-grow">
                      <div className="flex flex-wrap justify-between gap-4 mb-8">
                         <div className="flex gap-4">
-                            {freecells.map((card, i) => (
-                                <div key={i} ref={el => { freecellRefs.current[i] = el; }}>
-                                    {card ? 
-                                        <Card 
-                                            card={card}
-                                            onMouseDown={e => handleMouseDown(e, [card], 'freecell', i)}
-                                            isDragging={dragSourceInfo?.source === 'freecell' && dragSourceInfo.sourceIndex === i}
-                                            isPressed={pressedStack?.source === 'freecell' && pressedStack.sourceIndex === i}
-                                            isHinted={hint?.type === 'card' && hint.cardId === card.id}
-                                            width={cardSize.width} height={cardSize.height}
-                                        /> : 
-                                        <EmptyPile width={cardSize.width} height={cardSize.height} />
-                                    }
-                                </div>
-                            ))}
+                            {freecells.map((card, i) => {
+                                const isPressed = !!pressedStack && pressedStack.source === 'freecell' && pressedStack.sourcePileIndex === i;
+                                return (
+                                    <div key={i} ref={el => { freecellRefs.current[i] = el; }}>
+                                        {card ? 
+                                            <Card 
+                                                card={card}
+                                                onMouseDown={e => handleMouseDown(e, 'freecell', i, 0)}
+                                                isDragging={dragSourceInfo?.source === 'freecell' && dragSourceInfo.sourcePileIndex === i}
+                                                isPressed={isPressed}
+                                                isHinted={hint?.type === 'card' && hint.cardId === card.id}
+                                                width={cardSize.width} height={cardSize.height}
+                                            /> : 
+                                            <EmptyPile width={cardSize.width} height={cardSize.height} />
+                                        }
+                                    </div>
+                                );
+                            })}
                         </div>
                         <div className="flex gap-4">
                             {foundations.map((pile, i) => {
@@ -198,22 +221,22 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
                     <div className="flex flex-nowrap gap-3 justify-center">
                         {tableau.map((pile, pileIndex) => {
                             const pileHeight = pile.length > 0 ? (pile.length - 1) * cardSize.faceUpStackOffset + cardSize.height : cardSize.height;
-                            const areAllCardsInPileDragging = dragSourceInfo?.source === 'tableau' && dragSourceInfo.sourceIndex === pileIndex && dragSourceInfo.cards.length === pile.length;
+                            const areAllCardsInPileDragging = dragSourceInfo?.source === 'tableau' && dragSourceInfo.sourcePileIndex === pileIndex && dragSourceInfo.cards.length === pile.length;
 
                             return (
-                                <div key={pileIndex} className="relative" ref={el => { tableauRefs.current[pileIndex] = el; }}>
+                                <div key={pileIndex} className="relative" ref={el => { tableauRefs.current[pileIndex] = el; }} data-pile-id={`tableau-${pileIndex}`}>
                                     {(pile.length === 0 || areAllCardsInPileDragging) ? <EmptyPile width={cardSize.width} height={cardSize.height}/> :
                                         pile.map((card, cardIndex) => {
-                                            const cardsInStack = pile.slice(cardIndex);
-                                            const isCardDragging = !!dragSourceInfo && dragSourceInfo.cards.some(c => c.id === card.id);
-                                            {/* FIX: Use `pressedStack.cardIndex` for a more performant and correct check. */}
-                                            const isCardPressed = !!pressedStack && pressedStack.source === 'tableau' && pressedStack.sourceIndex === pileIndex && pressedStack.cardIndex != null && cardIndex >= pressedStack.cardIndex;
+                                            const isCardDragging = !!dragSourceInfo?.cards.some(c => c.id === card.id);
+                                            const isCardPressed = !!pressedStack && pressedStack.source === 'tableau' && pressedStack.sourcePileIndex === pileIndex && cardIndex >= pressedStack.sourceCardIndex;
 
-                                            return (
+                                            return (hiddenCardIds.includes(card.id)) ?
+                                            <div key={card.id} style={{ position: 'absolute', top: `${cardIndex * cardSize.faceUpStackOffset}px`, left: 0, width: cardSize.width, height: cardSize.height }} /> :
+                                            (
                                                 <Card
                                                     key={card.id}
                                                     card={card}
-                                                    onMouseDown={(e) => handleMouseDown(e, cardsInStack, 'tableau', pileIndex)}
+                                                    onMouseDown={(e) => handleMouseDown(e, 'tableau', pileIndex, cardIndex)}
                                                     width={cardSize.width} height={cardSize.height}
                                                     style={{ position: 'absolute', top: `${cardIndex * cardSize.faceUpStackOffset}px`, left: 0, zIndex: cardIndex + (isCardPressed ? 20 : 0) }}
                                                     isDragging={isCardDragging}
@@ -232,8 +255,19 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
             </div>
              <footer className={`w-full flex justify-center items-center gap-4 mt-auto p-4 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
                 <button onClick={initializeGame} className={buttonClasses.replace('bg-green-700 hover:bg-green-600', 'bg-blue-600 hover:bg-blue-500')}>New Game</button>
+                <button onClick={handleUndo} disabled={history.length === 0} className={buttonClasses}>Undo</button>
                 <button onClick={handleHint} className={buttonClasses}>Hint</button>
                 <button onClick={() => setIsRulesModalOpen(true)} className={buttonClasses}>Rules</button>
+                <div className="relative group">
+                    <button onClick={handleAutoplayModeToggle} className={buttonClasses}>
+                        Autoplay: <span className="capitalize">{autoplayMode}</span>
+                    </button>
+                    <div className="absolute bottom-full mb-2 w-60 bg-black/80 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-center left-1/2 -translate-x-1/2 z-20">
+                        { autoplayMode === 'off' && 'Off: No automatic moves.' }
+                        { autoplayMode === 'auto' && 'Auto: Automatically moves cards to the foundations.' }
+                        { autoplayMode === 'win' && 'Finishes the game automatically.' }
+                    </div>
+                </div>
                 <button onClick={onSettingsClick} className={iconButtonClasses} aria-label="Settings">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -264,6 +298,23 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
                     to { transform: translate(var(--translateX), var(--translateY)) scale(1) rotate(0deg); }
                 }
                 .return-animation { animation: return-card 0.3s ease-in-out forwards; }
+
+                @keyframes auto-move {
+                    0% { 
+                        transform: translate(0, 0) scale(1) rotate(0); 
+                        animation-timing-function: cubic-bezier(0.3, 0, 0.8, 0.5);
+                    }
+                    40% { 
+                        transform: translate(calc(var(--translateX) * 0.4), calc(var(--translateY) * 0.4 - 40px)) scale(1.1) rotate(8deg); 
+                        animation-timing-function: cubic-bezier(0.2, 0.5, 0.7, 1);
+                    }
+                    100% { 
+                        transform: translate(var(--translateX), var(--translateY)) scale(1) rotate(0); 
+                    }
+                }
+                .auto-move-card {
+                    animation: auto-move 0.5s ease-out forwards;
+                }
                 
                 .card-pressed {
                     transform: translateY(-8px) translateX(4px) rotate(3deg) scale(1.03);
