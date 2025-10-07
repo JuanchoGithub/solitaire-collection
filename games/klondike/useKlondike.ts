@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { CardType, Theme } from '../../types';
 import { Suit, Rank } from '../../types';
@@ -30,13 +31,73 @@ type HintState = { type: 'card'; cardId: number } | { type: 'stock' } | null;
 type DragSource = 'tableau' | 'waste' | 'foundation';
 type DropTarget = 'tableau' | 'foundation';
 
+type KlondikeMode = 'random' | 'winnable';
+
+const generateWinnableDeal = (): { tableau: CardType[][]; stock: CardType[] } => {
+    let cardId = 0;
+    // 1. Start with a solved state, where all cards are on the foundations
+    const tempFoundations: CardType[][] = SUITS.map(suit =>
+        RANKS.map(rank => ({ id: cardId++, suit, rank, faceUp: true }))
+    );
+    const tempTableau: CardType[][] = Array.from({ length: 7 }, () => []);
+
+    // 2. Perform a series of reverse moves to shuffle cards from foundations to the tableau
+    // This creates a complex, but solvable, board state.
+    for (let i = 0; i < 150; i++) {
+        const availableFoundations = tempFoundations.map((p, i) => i).filter(i => tempFoundations[i].length > 0);
+        if (availableFoundations.length === 0) break;
+
+        const fIndex = availableFoundations[Math.floor(Math.random() * availableFoundations.length)];
+        const cardToMove = tempFoundations[fIndex][tempFoundations[fIndex].length - 1];
+
+        const validTableauSpots = [];
+        for (let tIndex = 0; tIndex < 7; tIndex++) {
+            const pile = tempTableau[tIndex];
+            if (pile.length === 0) {
+                if (cardToMove.rank === Rank.KING) validTableauSpots.push(tIndex);
+            } else {
+                const topCard = pile[pile.length - 1];
+                if (SUIT_COLOR_MAP[cardToMove.suit] !== SUIT_COLOR_MAP[topCard.suit] && RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topCard.rank] - 1) {
+                    validTableauSpots.push(tIndex);
+                }
+            }
+        }
+
+        if (validTableauSpots.length > 0) {
+            const destIndex = validTableauSpots[Math.floor(Math.random() * validTableauSpots.length)];
+            tempTableau[destIndex].push(tempFoundations[fIndex].pop()!);
+        }
+    }
+
+    // 3. Collect all cards from this solvable state into a single deck
+    const allCards: CardType[] = [...tempTableau.flat(), ...tempFoundations.flat()];
+    
+    // Shuffle them to obscure the obvious solution path
+    for (let i = allCards.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [allCards[i], allCards[j]] = [allCards[j], allCards[i]];
+    }
+
+    // 4. Deal these "winnable" cards into a standard Klondike starting layout
+    const deckForState = [...allCards];
+    const finalTableau: CardType[][] = Array.from({ length: 7 }, (_, i) => deckForState.splice(0, i + 1));
+    finalTableau.forEach(pile => {
+        pile.forEach((card, index) => card.faceUp = (index === pile.length - 1));
+    });
+
+    const finalStock = deckForState.map(c => ({ ...c, faceUp: false }));
+
+    return { tableau: finalTableau, stock: finalStock };
+};
+
 
 interface UseKlondikeProps {
     theme: Theme;
     layout: 'portrait' | 'landscape';
+    gameMode: KlondikeMode;
 }
 
-export const useKlondike = ({ theme, layout }: UseKlondikeProps) => {
+export const useKlondike = ({ theme, layout, gameMode }: UseKlondikeProps) => {
     const { Board, Card } = theme;
 
     // Core Game State
@@ -312,13 +373,30 @@ export const useKlondike = ({ theme, layout }: UseKlondikeProps) => {
 
     useEffect(() => {
         if (isDealing && mainContainerRef.current && stockRef.current && tableauRefs.current.every(ref => ref) && initialDeckRef.current) {
-            let cardId = 0;
-            const fullDeck = SUITS.flatMap(suit => RANKS.map(rank => ({ id: cardId++, suit, rank, faceUp: false })));
-            for (let i = fullDeck.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [fullDeck[i], fullDeck[j]] = [fullDeck[j], fullDeck[i]];
+            let finalTableau: CardType[][];
+            let finalStock: CardType[];
+
+            if (gameMode === 'winnable') {
+                const deal = generateWinnableDeal();
+                finalTableau = deal.tableau;
+                finalStock = deal.stock;
+            } else {
+                let cardId = 0;
+                const fullDeck = SUITS.flatMap(suit => RANKS.map(rank => ({ id: cardId++, suit, rank, faceUp: false })));
+                for (let i = fullDeck.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [fullDeck[i], fullDeck[j]] = [fullDeck[j], fullDeck[i]];
+                }
+                const deckForState = [...fullDeck];
+                finalTableau = Array.from({ length: 7 }, (_, i) => deckForState.splice(0, i + 1));
+                finalStock = deckForState;
+                finalTableau.forEach((pile) => {
+                    if (pile.length > 0) {
+                        pile[pile.length - 1].faceUp = true;
+                    }
+                });
             }
-            const deckForState = [...fullDeck];
+            
             setShuffleClass('perform-shuffle');
             const dealStartTime = 800;
             const flyingCards: typeof dealAnimationCards = [];
@@ -326,12 +404,10 @@ export const useKlondike = ({ theme, layout }: UseKlondikeProps) => {
             const dealStagger = 25;
             const fromRect = initialDeckRef.current.getBoundingClientRect();
             if (!fromRect) return;
-            const finalTableau: CardType[][] = Array.from({ length: 7 }, (_, i) => deckForState.splice(0, i + 1));
-            const finalStock = deckForState;
+
             finalTableau.forEach((pile, pileIndex) => {
                 pile.forEach((card, cardIndex) => {
-                    const isLastCardInPile = cardIndex === pile.length - 1;
-                    const animatedCard = { ...card, faceUp: isLastCardInPile };
+                    const animatedCard = { ...card };
                     const toEl = tableauRefs.current[pileIndex];
                     if (toEl) {
                         const toRect = toEl.getBoundingClientRect();
@@ -360,9 +436,6 @@ export const useKlondike = ({ theme, layout }: UseKlondikeProps) => {
             });
             setDealAnimationCards(flyingCards);
             setTimeout(() => {
-                finalTableau.forEach(pile => {
-                    if (pile.length > 0) pile[pile.length - 1].faceUp = true;
-                });
                 setTableau(finalTableau);
                 setStock(finalStock);
                 setIsDealing(false);
@@ -371,7 +444,7 @@ export const useKlondike = ({ theme, layout }: UseKlondikeProps) => {
                 setTime(0);
             }, dealStartTime + dealDelay + 400);
         }
-    }, [isDealing, cardSize.width, cardSize.faceDownStackOffset, layout]);
+    }, [isDealing, cardSize.width, cardSize.faceDownStackOffset, layout, gameMode]);
 
 
     useEffect(() => {

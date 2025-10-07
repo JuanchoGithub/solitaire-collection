@@ -11,9 +11,12 @@ import type { JsonTheme } from './themes/json/types';
 import { createThemeFromJson } from './themes/json/loader';
 import type { SpiderSuitCount } from './games/spider/types';
 
+type KlondikeMode = 'random' | 'winnable';
+
 const App: React.FC = () => {
     const [currentGame, setCurrentGame] = useState<'spider' | 'klondike' | 'freecell'>('spider');
     const [spiderSuitCount, setSpiderSuitCount] = useState<SpiderSuitCount>(1);
+    const [klondikeMode, setKlondikeMode] = useState<KlondikeMode>('random');
     const [isGameMenuOpen, setIsGameMenuOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isThemeCreatorOpen, setIsThemeCreatorOpen] = useState(false);
@@ -47,23 +50,24 @@ const App: React.FC = () => {
         }
     }, []);
 
-    const handleSelectGame = useCallback((selection: 'klondike' | 'freecell' | { game: 'spider', suits: SpiderSuitCount }) => {
-        if (selection === 'klondike') {
-            if (currentGame !== 'klondike') {
-                setCurrentGame('klondike');
-            }
-        } else if (selection === 'freecell') {
+    const handleSelectGame = useCallback((selection: { game: 'klondike', mode: KlondikeMode } | 'freecell' | { game: 'spider', suits: SpiderSuitCount }) => {
+        if (selection === 'freecell') {
             if (currentGame !== 'freecell') {
                 setCurrentGame('freecell');
             }
-        } else {
+        } else if (selection.game === 'klondike') {
+            if (currentGame !== 'klondike' || klondikeMode !== selection.mode) {
+                setKlondikeMode(selection.mode);
+                setCurrentGame('klondike');
+            }
+        } else { // spider
             if (currentGame !== 'spider' || spiderSuitCount !== selection.suits) {
                 setSpiderSuitCount(selection.suits);
                 setCurrentGame('spider');
             }
         }
         setIsGameMenuOpen(false);
-    }, [currentGame, spiderSuitCount]);
+    }, [currentGame, spiderSuitCount, klondikeMode]);
 
     const handleOpenGameMenu = useCallback(() => setIsGameMenuOpen(true), []);
     const handleCloseGameMenu = useCallback(() => setIsGameMenuOpen(false), []);
@@ -107,7 +111,7 @@ const App: React.FC = () => {
             gameElement = <Spider key={`spider-${spiderSuitCount}`} {...commonProps} suitCount={spiderSuitCount} />;
             break;
         case 'klondike':
-            gameElement = <Klondike key="klondike" {...commonProps} />;
+            gameElement = <Klondike key={`klondike-${klondikeMode}`} {...commonProps} gameMode={klondikeMode} />;
             break;
         case 'freecell':
             gameElement = <Freecell key="freecell" {...commonProps} />;
@@ -126,6 +130,7 @@ const App: React.FC = () => {
                     onSelectGame={handleSelectGame}
                     activeGame={currentGame}
                     activeSpiderSuitCount={spiderSuitCount}
+                    activeKlondikeMode={klondikeMode}
                     buttonRef={gameMenuButtonRef}
                 />
             )}

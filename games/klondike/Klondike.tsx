@@ -10,11 +10,12 @@ interface KlondikeProps {
     onTitleClick: () => void;
     onSettingsClick: () => void;
     gameMenuButtonRef: React.RefObject<HTMLButtonElement>;
+    gameMode: 'random' | 'winnable';
 }
 
-const Klondike: React.FC<KlondikeProps> = ({ theme, onTitleClick, onSettingsClick, gameMenuButtonRef }) => {
+const Klondike: React.FC<KlondikeProps> = ({ theme, onTitleClick, onSettingsClick, gameMenuButtonRef, gameMode }) => {
     const { layout } = useResponsiveLayout();
-    const controller = useKlondike({ theme, layout });
+    const controller = useKlondike({ theme, layout, gameMode });
     return <GameBoard controller={controller} onTitleClick={onTitleClick} onSettingsClick={onSettingsClick} gameMenuButtonRef={gameMenuButtonRef} layout={layout} />;
 };
 

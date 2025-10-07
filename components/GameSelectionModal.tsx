@@ -2,15 +2,18 @@
 import React, { useState, useEffect } from 'react';
 import type { SpiderSuitCount } from '../games/spider/types';
 
+type KlondikeMode = 'random' | 'winnable';
+
 interface GameSelectionModalProps {
   onClose: () => void;
-  onSelectGame: (selection: 'klondike' | 'freecell' | { game: 'spider', suits: SpiderSuitCount }) => void;
+  onSelectGame: (selection: { game: 'klondike', mode: KlondikeMode } | 'freecell' | { game: 'spider', suits: SpiderSuitCount }) => void;
   activeGame: 'spider' | 'klondike' | 'freecell';
   activeSpiderSuitCount: SpiderSuitCount;
+  activeKlondikeMode: KlondikeMode;
   buttonRef: React.RefObject<HTMLButtonElement>;
 }
 
-const GameSelectionModal: React.FC<GameSelectionModalProps> = ({ onClose, onSelectGame, activeGame, activeSpiderSuitCount, buttonRef }) => {
+const GameSelectionModal: React.FC<GameSelectionModalProps> = ({ onClose, onSelectGame, activeGame, activeSpiderSuitCount, activeKlondikeMode, buttonRef }) => {
   const [position, setPosition] = useState<{ top: number, left: number } | null>(null);
 
   useEffect(() => {
@@ -56,10 +59,16 @@ const GameSelectionModal: React.FC<GameSelectionModalProps> = ({ onClose, onSele
             </button>
              <div className="border-t border-gray-200 my-2"></div>
             <button
-                onClick={() => onSelectGame('klondike')}
-                className={`${buttonBaseClasses} ${activeGame === 'klondike' ? activeButtonClasses : inactiveButtonClasses}`}
+                onClick={() => onSelectGame({ game: 'klondike', mode: 'random' })}
+                className={`${buttonBaseClasses} ${activeGame === 'klondike' && activeKlondikeMode === 'random' ? activeButtonClasses : inactiveButtonClasses}`}
             >
-                Klondike
+                Klondike (Standard)
+            </button>
+             <button
+                onClick={() => onSelectGame({ game: 'klondike', mode: 'winnable' })}
+                className={`${buttonBaseClasses} ${activeGame === 'klondike' && activeKlondikeMode === 'winnable' ? activeButtonClasses : inactiveButtonClasses}`}
+            >
+                Klondike (Winnable)
             </button>
             <button
                 onClick={() => onSelectGame('freecell')}
