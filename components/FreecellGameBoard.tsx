@@ -1,3 +1,5 @@
+
+
 import React from 'react';
 import type { FreecellController } from '../games/freecell/useFreecell';
 import EmptyPile from './EmptyPile';
@@ -14,9 +16,10 @@ interface FreecellGameBoardProps {
     controller: FreecellController;
     onTitleClick: () => void;
     onSettingsClick: () => void;
+    gameMenuButtonRef: React.RefObject<HTMLButtonElement>;
 }
 
-const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTitleClick, onSettingsClick }) => {
+const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTitleClick, onSettingsClick, gameMenuButtonRef }) => {
     const {
         Board, Card, freecells, foundations, tableau, history, isWon, isRulesModalOpen, pressedStack, hint, moves, time, isPaused, autoplayMode,
         cardSize, shuffleClass, isDealing, dealAnimationCards, animationData, returnAnimationData, dragGhost, dragSourceInfo, hiddenCardIds, foundationFx,
@@ -141,6 +144,7 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
                     onTitleClick={onTitleClick}
                     onPauseClick={() => setIsPaused(true)}
                     formatTime={formatTime}
+                    gameMenuButtonRef={gameMenuButtonRef}
                 >
                     <div className="flex-grow"></div>
                 </GameHeader>
@@ -148,8 +152,8 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
             
             <div className="w-full flex-1 overflow-y-auto min-h-0">
                 <main ref={mainContainerRef} className="max-w-7xl mx-auto w-full pt-4 pb-4">
-                     <div className="flex flex-wrap justify-between gap-4 mb-8">
-                        <div className="flex gap-4">
+                     <div className="flex flex-col sm:flex-row items-center sm:justify-between gap-4 mb-8">
+                        <div className="flex gap-3">
                             {freecells.map((card, i) => {
                                 const isPressed = !!pressedStack && pressedStack.source === 'freecell' && pressedStack.sourcePileIndex === i;
                                 return (
@@ -169,7 +173,7 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
                                 );
                             })}
                         </div>
-                        <div className="flex gap-4">
+                        <div className="flex gap-3">
                             {foundations.map((pile, i) => {
                                 const topCard = pile[pile.length - 1];
                                 return (

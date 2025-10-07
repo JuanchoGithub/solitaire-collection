@@ -8,11 +8,12 @@ interface KlondikeProps {
     theme: Theme;
     onTitleClick: () => void;
     onSettingsClick: () => void;
+    gameMenuButtonRef: React.RefObject<HTMLButtonElement>;
 }
 
-const Klondike: React.FC<KlondikeProps> = ({ theme, onTitleClick, onSettingsClick }) => {
+const Klondike: React.FC<KlondikeProps> = ({ theme, onTitleClick, onSettingsClick, gameMenuButtonRef }) => {
     const controller = useKlondike({ theme });
-    return <GameBoard controller={controller} onTitleClick={onTitleClick} onSettingsClick={onSettingsClick} />;
+    return <GameBoard controller={controller} onTitleClick={onTitleClick} onSettingsClick={onSettingsClick} gameMenuButtonRef={gameMenuButtonRef} />;
 };
 
 export default Klondike;

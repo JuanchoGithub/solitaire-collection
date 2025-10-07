@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import Spider from './games/spider/Spider';
 import Klondike from './games/klondike/Klondike';
 import Freecell from './games/freecell/Freecell';
@@ -14,6 +14,7 @@ const App: React.FC = () => {
     const [isGameMenuOpen, setIsGameMenuOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [themeKey, setThemeKey] = useState<ThemeKey>('gemini');
+    const gameMenuButtonRef = useRef<HTMLButtonElement>(null);
 
     const handleSelectGame = useCallback((selection: 'klondike' | 'freecell' | { game: 'spider', suits: SpiderSuitCount }) => {
         if (selection === 'klondike') {
@@ -41,21 +42,28 @@ const App: React.FC = () => {
     const handleSelectTheme = useCallback((key: ThemeKey) => setThemeKey(key), []);
 
     const theme = THEMES[themeKey].theme;
+    
+    const commonProps = {
+        theme,
+        onTitleClick: handleOpenGameMenu,
+        onSettingsClick: handleOpenSettings,
+        gameMenuButtonRef,
+    };
 
     let gameElement;
     switch(currentGame) {
         case 'spider':
             // The key ensures that changing the suit count forces a remount and thus a new game.
-            gameElement = <Spider key={`spider-${spiderSuitCount}`} theme={theme} onTitleClick={handleOpenGameMenu} onSettingsClick={handleOpenSettings} suitCount={spiderSuitCount} />;
+            gameElement = <Spider key={`spider-${spiderSuitCount}`} {...commonProps} suitCount={spiderSuitCount} />;
             break;
         case 'klondike':
-            gameElement = <Klondike key="klondike" theme={theme} onTitleClick={handleOpenGameMenu} onSettingsClick={handleOpenSettings} />;
+            gameElement = <Klondike key="klondike" {...commonProps} />;
             break;
         case 'freecell':
-            gameElement = <Freecell key="freecell" theme={theme} onTitleClick={handleOpenGameMenu} onSettingsClick={handleOpenSettings} />;
+            gameElement = <Freecell key="freecell" {...commonProps} />;
             break;
         default:
-            gameElement = <Spider key={`spider-${spiderSuitCount}`} theme={theme} onTitleClick={handleOpenGameMenu} onSettingsClick={handleOpenSettings} suitCount={spiderSuitCount} />;
+            gameElement = <Spider key={`spider-${spiderSuitCount}`} {...commonProps} suitCount={spiderSuitCount} />;
             break;
     }
 
@@ -68,6 +76,7 @@ const App: React.FC = () => {
                     onSelectGame={handleSelectGame}
                     activeGame={currentGame}
                     activeSpiderSuitCount={spiderSuitCount}
+                    buttonRef={gameMenuButtonRef}
                 />
             )}
             {isSettingsModalOpen && (

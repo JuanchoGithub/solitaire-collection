@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { KlondikeController } from '../games/klondike/useKlondike';
 import EmptyPile from './EmptyPile';
@@ -14,9 +15,10 @@ interface GameBoardProps {
     controller: KlondikeController;
     onTitleClick: () => void;
     onSettingsClick: () => void;
+    gameMenuButtonRef: React.RefObject<HTMLButtonElement>;
 }
 
-const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSettingsClick }) => {
+const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSettingsClick, gameMenuButtonRef }) => {
     const {
         Board, Card, stock, waste, foundations, tableau, history, isWon, isRulesModalOpen, shakeCardId, pressedStack, hint, moves, time, isPaused, turnMode, autoplayMode,
         cardSize, shuffleClass, isDealing, dealAnimationCards, animationData, returnAnimationData, stockAnimationData, dragGhost, dragSourceInfo, hiddenCardIds, foundationFx,
@@ -215,6 +217,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                     onTitleClick={onTitleClick}
                     onPauseClick={() => setIsPaused(true)}
                     formatTime={formatTime}
+                    gameMenuButtonRef={gameMenuButtonRef}
                 >
                     <div className="flex-grow flex justify-center items-center flex-wrap gap-x-6 gap-y-2">
                         <div className="relative group">

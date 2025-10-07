@@ -1,3 +1,5 @@
+
+
 import React from 'react';
 import type { SpiderController } from '../games/spider/useSpider';
 import EmptyPile from './EmptyPile';
@@ -12,9 +14,10 @@ interface SpiderGameBoardProps {
     controller: SpiderController;
     onTitleClick: () => void;
     onSettingsClick: () => void;
+    gameMenuButtonRef: React.RefObject<HTMLButtonElement>;
 }
 
-const SpiderGameBoard: React.FC<SpiderGameBoardProps> = ({ controller, onTitleClick, onSettingsClick }) => {
+const SpiderGameBoard: React.FC<SpiderGameBoardProps> = ({ controller, onTitleClick, onSettingsClick, gameMenuButtonRef }) => {
     const {
         Board, Card, stock, tableau, completedSets, history, isWon, isRulesModalOpen, shakeStock, pressedStack, hint, moves, time, isPaused, suitCount,
         cardSize, shuffleClass, isDealing, isAnimating, dealAnimationCards, animationData, returnAnimationData, stockAnimationData, completedSetAnimation, dragGhost, dragSourceInfo, hiddenCardIds,
@@ -23,6 +26,7 @@ const SpiderGameBoard: React.FC<SpiderGameBoardProps> = ({ controller, onTitleCl
     } = controller;
 
     const titleText = `Spider (${suitCount} Suit${suitCount > 1 ? 's' : ''})`;
+    const tableauWidth = cardSize.width * 10 + 8 * 9; // 10 cards, 9 gaps of 8px (gap-2)
 
     return (
         <Board shuffleClass={shuffleClass}>
@@ -203,80 +207,87 @@ const SpiderGameBoard: React.FC<SpiderGameBoardProps> = ({ controller, onTitleCl
                     moves={moves}
                     isDealing={isDealing}
                     onTitleClick={onTitleClick}
-                    onPauseClick={() => setIsPaused(false)}
+                    onPauseClick={() => setIsPaused(true)}
                     formatTime={formatTime}
+                    gameMenuButtonRef={gameMenuButtonRef}
                 >
                     <div className="flex-grow"></div>
                 </GameHeader>
             </div>
             
-            <main ref={mainContainerRef} className="max-w-7xl mx-auto w-full pt-4 pb-4 flex-1 overflow-y-auto min-h-0">
-                 <div className="flex flex-nowrap gap-2 justify-center">
-                    {tableau.map((pile, pileIndex) => {
-                        const pileHeight = pile.length > 0 ? 
-                            (pile.findIndex(c => c.faceUp) !== -1 ? (pile.findIndex(c => c.faceUp) * cardSize.faceDownStackOffset) : (pile.length - 1) * cardSize.faceDownStackOffset) +
-                            (pile.filter(c=>c.faceUp).length * cardSize.faceUpStackOffset) + 
-                            cardSize.height - cardSize.faceUpStackOffset
-                            : cardSize.height;
-                        
-                        return (
-                            <div key={pileIndex} className="relative" ref={el => { tableauRefs.current[pileIndex] = el; }} data-pile-id={`tableau-${pileIndex}`}>
-                                <EmptyPile width={cardSize.width} height={cardSize.height}/>
-                                <div style={{ position: 'absolute', top: 0, left: 0 }}>
-                                {pile.map((card, cardIndex) => {
-                                        const isCardDragging = !!dragSourceInfo?.cards.some(c => c.id === card.id);
-                                        const isCardPressed = !!pressedStack && 
-                                            pressedStack.sourcePileIndex === pileIndex &&
-                                            cardIndex >= pressedStack.sourceCardIndex;
-                                        
-                                        const topOffset = pile.slice(0, cardIndex).reduce((acc, c) => acc + (c.faceUp ? cardSize.faceUpStackOffset : cardSize.faceDownStackOffset), 0);
-                                        
-                                        return (hiddenCardIds.includes(card.id)) ?
-                                        <div key={card.id} style={{ position: 'absolute', top: `${topOffset}px`, left: 0, width: cardSize.width, height: cardSize.height }} /> :
-                                        <Card
-                                            key={card.id}
-                                            card={card}
-                                            onMouseDown={(e) => handleMouseDown(e, 'tableau', pileIndex, cardIndex)}
-                                            width={cardSize.width} height={cardSize.height}
-                                            style={{ position: 'absolute', top: `${topOffset}px`, left: 0, zIndex: cardIndex + (isCardPressed ? 20 : 0) }}
-                                            isDragging={isCardDragging}
-                                            isPressed={isCardPressed}
-                                            isHinted={hint?.type === 'card' && hint.cardId === card.id}
-                                        />
-                                    })
-                                }
-                                </div>
-                                <div style={{ height: `${pileHeight}px`, width: `${cardSize.width}px` }}></div>
+            <div className="w-full flex-1 overflow-y-auto min-h-0">
+                <main ref={mainContainerRef} className="max-w-7xl mx-auto w-full pt-4 pb-4">
+                     <div style={{ width: `${tableauWidth}px` }} className="mx-auto">
+                        <div className={`flex justify-between items-start gap-4 mb-4 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
+                            <div ref={stockRef} onClick={handleStockClick} className={`relative cursor-pointer ${shakeStock ? 'card-shake' : ''} ${hint?.type === 'stock' ? 'stock-hint' : ''}`}>
+                                {stock.length > 0 ? (
+                                    <>
+                                        {Array.from({ length: Math.ceil(stock.length / 10) }).map((_, i) => (
+                                            <div key={i} style={{ position: 'absolute', left: `${i * 10}px`, top: 0 }}>
+                                                <Card card={{ id: -1 - i, suit: Suit.SPADES, rank: Rank.ACE, faceUp: false }} width={cardSize.width} height={cardSize.height} />
+                                            </div>
+                                        ))}
+                                        <div style={{width: cardSize.width + (Math.ceil(stock.length/10)-1)*10, height: cardSize.height}} />
+                                    </>
+                                ) : <EmptyPile width={cardSize.width} height={cardSize.height} />}
                             </div>
-                        );
-                    })}
-                </div>
-            </main>
-            
-             <div className={`w-full px-4 pt-4 flex-shrink-0 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
-                <div className="max-w-7xl mx-auto w-full flex justify-between items-end gap-4">
-                     <div ref={stockRef} onClick={handleStockClick} className={`relative cursor-pointer ${shakeStock ? 'card-shake' : ''} ${hint?.type === 'stock' ? 'stock-hint' : ''}`}>
-                        {stock.length > 0 ? (
-                            Array.from({ length: Math.ceil(stock.length / 10) }).map((_, i) => (
-                                <div key={i} style={{ position: 'absolute', left: `${i * 10}px`, bottom: 0 }}>
-                                    <Card card={{ id: -1 - i, suit: Suit.SPADES, rank: Rank.ACE, faceUp: false }} width={cardSize.width} height={cardSize.height} />
-                                </div>
-                            ))
-                        ) : <EmptyPile width={cardSize.width} height={cardSize.height} />}
-                        <div style={{width: cardSize.width + (Math.ceil(stock.length/10)-1)*10, height: cardSize.height}} />
-                    </div>
-                    <div ref={completedSetsRef} className="relative">
-                        {completedSets > 0 ? (
-                            Array.from({length: completedSets}).map((_, i) => (
-                                <div key={i} style={{ position: 'absolute', left: `${i * cardSize.width/4}px`, bottom: 0 }}>
-                                    <Card card={{id: -100-i, suit: Suit.SPADES, rank: Rank.KING, faceUp: true}} width={cardSize.width} height={cardSize.height} />
-                                </div>
-                            ))
-                        ) : <EmptyPile width={cardSize.width} height={cardSize.height} />}
-                        <div style={{width: cardSize.width + (completedSets-1)*(cardSize.width/4), height: cardSize.height}} />
-                    </div>
-                </div>
+                            <div ref={completedSetsRef} className="relative">
+                                {completedSets > 0 ? (
+                                    <>
+                                        {Array.from({length: completedSets}).map((_, i) => (
+                                            <div key={i} style={{ position: 'absolute', right: `${i * cardSize.width/4}px`, top: 0 }}>
+                                                <Card card={{id: -100-i, suit: Suit.SPADES, rank: Rank.KING, faceUp: true}} width={cardSize.width} height={cardSize.height} />
+                                            </div>
+                                        ))}
+                                        <div style={{width: cardSize.width + (completedSets-1)*(cardSize.width/4), height: cardSize.height}} />
+                                    </>
+                                ) : <EmptyPile width={cardSize.width} height={cardSize.height} />}
+                            </div>
+                        </div>
+                        <div className="flex flex-nowrap gap-2">
+                            {tableau.map((pile, pileIndex) => {
+                                const pileHeight = pile.length > 0 ? 
+                                    (pile.findIndex(c => c.faceUp) !== -1 ? (pile.findIndex(c => c.faceUp) * cardSize.faceDownStackOffset) : (pile.length - 1) * cardSize.faceDownStackOffset) +
+                                    (pile.filter(c=>c.faceUp).length * cardSize.faceUpStackOffset) + 
+                                    cardSize.height - cardSize.faceUpStackOffset
+                                    : cardSize.height;
+                                
+                                return (
+                                    <div key={pileIndex} className="relative" ref={el => { tableauRefs.current[pileIndex] = el; }} data-pile-id={`tableau-${pileIndex}`}>
+                                        <EmptyPile width={cardSize.width} height={cardSize.height}/>
+                                        <div style={{ position: 'absolute', top: 0, left: 0 }}>
+                                        {pile.map((card, cardIndex) => {
+                                                const isCardDragging = !!dragSourceInfo?.cards.some(c => c.id === card.id);
+                                                const isCardPressed = !!pressedStack && 
+                                                    pressedStack.sourcePileIndex === pileIndex &&
+                                                    cardIndex >= pressedStack.sourceCardIndex;
+                                                
+                                                const topOffset = pile.slice(0, cardIndex).reduce((acc, c) => acc + (c.faceUp ? cardSize.faceUpStackOffset : cardSize.faceDownStackOffset), 0);
+                                                
+                                                return (hiddenCardIds.includes(card.id)) ?
+                                                <div key={card.id} style={{ position: 'absolute', top: `${topOffset}px`, left: 0, width: cardSize.width, height: cardSize.height }} /> :
+                                                <Card
+                                                    key={card.id}
+                                                    card={card}
+                                                    onMouseDown={(e) => handleMouseDown(e, 'tableau', pileIndex, cardIndex)}
+                                                    width={cardSize.width} height={cardSize.height}
+                                                    style={{ position: 'absolute', top: `${topOffset}px`, left: 0, zIndex: cardIndex + (isCardPressed ? 20 : 0) }}
+                                                    isDragging={isCardDragging}
+                                                    isPressed={isCardPressed}
+                                                    isHinted={hint?.type === 'card' && hint.cardId === card.id}
+                                                />
+                                            })
+                                        }
+                                        </div>
+                                        <div style={{ height: `${pileHeight}px`, width: `${cardSize.width}px` }}></div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                     </div>
+                </main>
             </div>
+            
             <GameFooter
                 onNewGame={initializeGame}
                 onUndo={handleUndo}

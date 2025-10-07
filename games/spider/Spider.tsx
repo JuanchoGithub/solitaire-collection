@@ -10,11 +10,12 @@ interface SpiderProps {
     onTitleClick: () => void;
     onSettingsClick: () => void;
     suitCount: SpiderSuitCount;
+    gameMenuButtonRef: React.RefObject<HTMLButtonElement>;
 }
 
-const Spider: React.FC<SpiderProps> = ({ theme, onTitleClick, onSettingsClick, suitCount }) => {
+const Spider: React.FC<SpiderProps> = ({ theme, onTitleClick, onSettingsClick, suitCount, gameMenuButtonRef }) => {
     const controller = useSpider({ theme, suitCount });
-    return <SpiderGameBoard controller={controller} onTitleClick={onTitleClick} onSettingsClick={onSettingsClick} />;
+    return <SpiderGameBoard controller={controller} onTitleClick={onTitleClick} onSettingsClick={onSettingsClick} gameMenuButtonRef={gameMenuButtonRef} />;
 };
 
 export default Spider;
