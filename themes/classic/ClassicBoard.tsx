@@ -1,3 +1,4 @@
+
 import React from 'react';
 
 interface ClassicBoardProps {
@@ -7,7 +8,7 @@ interface ClassicBoardProps {
 
 const ClassicBoard: React.FC<ClassicBoardProps> = ({ children, shuffleClass }) => {
     return (
-        <div className={`bg-green-800 h-screen w-full text-white pt-2 px-4 font-sans overflow-hidden relative flex flex-col ${shuffleClass}`}>
+        <div className={`bg-gradient-to-br from-green-800 to-green-900 h-screen w-full text-white font-sans overflow-hidden relative flex flex-col ${shuffleClass}`}>
             {children}
         </div>
     );

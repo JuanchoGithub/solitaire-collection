@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { BoardThemeProps } from '../../types';
 import type { JsonTheme } from './types';
@@ -13,7 +14,7 @@ const JsonBoard: React.FC<JsonBoardProps> = ({ children, shuffleClass, theme }) 
         fontFamily: '"Quicksand", sans-serif'
     };
     return (
-        <div style={boardStyle} className={`h-screen w-full pt-2 px-4 overflow-hidden relative flex flex-col ${shuffleClass}`}>
+        <div style={boardStyle} className={`h-screen w-full overflow-hidden relative flex flex-col ${shuffleClass}`}>
             {children}
         </div>
     );

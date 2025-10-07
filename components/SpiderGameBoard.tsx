@@ -1,5 +1,6 @@
 
 
+
 import React from 'react';
 import type { SpiderController } from '../games/spider/useSpider';
 import EmptyPile from './EmptyPile';
@@ -15,9 +16,10 @@ interface SpiderGameBoardProps {
     onTitleClick: () => void;
     onSettingsClick: () => void;
     gameMenuButtonRef: React.RefObject<HTMLButtonElement>;
+    layout: 'portrait' | 'landscape';
 }
 
-const SpiderGameBoard: React.FC<SpiderGameBoardProps> = ({ controller, onTitleClick, onSettingsClick, gameMenuButtonRef }) => {
+const SpiderGameBoard: React.FC<SpiderGameBoardProps> = ({ controller, onTitleClick, onSettingsClick, gameMenuButtonRef, layout }) => {
     const {
         Board, Card, stock, tableau, completedSets, history, isWon, isRulesModalOpen, shakeStock, pressedStack, hint, moves, time, isPaused, suitCount,
         cardSize, shuffleClass, isDealing, isAnimating, dealAnimationCards, animationData, returnAnimationData, stockAnimationData, completedSetAnimation, dragGhost, dragSourceInfo, hiddenCardIds,
@@ -210,6 +212,7 @@ const SpiderGameBoard: React.FC<SpiderGameBoardProps> = ({ controller, onTitleCl
                     onPauseClick={() => setIsPaused(true)}
                     formatTime={formatTime}
                     gameMenuButtonRef={gameMenuButtonRef}
+                    layout={layout}
                 >
                     <div className="flex-grow"></div>
                 </GameHeader>
@@ -297,6 +300,7 @@ const SpiderGameBoard: React.FC<SpiderGameBoardProps> = ({ controller, onTitleCl
                 isUndoDisabled={history.length === 0}
                 isHintDisabled={isDealing || isPaused || isAnimating}
                 isDealing={isDealing}
+                layout={layout}
             />
             <style>{`
                 @keyframes deal-card-fly {

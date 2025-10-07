@@ -1,5 +1,6 @@
 
 
+
 import React from 'react';
 import type { FreecellController } from '../games/freecell/useFreecell';
 import EmptyPile from './EmptyPile';
@@ -17,9 +18,10 @@ interface FreecellGameBoardProps {
     onTitleClick: () => void;
     onSettingsClick: () => void;
     gameMenuButtonRef: React.RefObject<HTMLButtonElement>;
+    layout: 'portrait' | 'landscape';
 }
 
-const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTitleClick, onSettingsClick, gameMenuButtonRef }) => {
+const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTitleClick, onSettingsClick, gameMenuButtonRef, layout }) => {
     const {
         Board, Card, freecells, foundations, tableau, history, isWon, isRulesModalOpen, pressedStack, hint, moves, time, isPaused, autoplayMode,
         cardSize, shuffleClass, isDealing, dealAnimationCards, animationData, returnAnimationData, dragGhost, dragSourceInfo, hiddenCardIds, foundationFx,
@@ -145,6 +147,7 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
                     onPauseClick={() => setIsPaused(true)}
                     formatTime={formatTime}
                     gameMenuButtonRef={gameMenuButtonRef}
+                    layout={layout}
                 >
                     <div className="flex-grow"></div>
                 </GameHeader>
@@ -259,6 +262,7 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
                 isUndoDisabled={history.length === 0}
                 isHintDisabled={isDealing || isPaused || !!animationData}
                 isDealing={isDealing}
+                layout={layout}
             >
                 <div className="relative group">
                     <button onClick={handleAutoplayModeToggle} className="bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition duration-200">

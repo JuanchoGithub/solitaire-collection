@@ -16,9 +16,10 @@ interface GameBoardProps {
     onTitleClick: () => void;
     onSettingsClick: () => void;
     gameMenuButtonRef: React.RefObject<HTMLButtonElement>;
+    layout: 'portrait' | 'landscape';
 }
 
-const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSettingsClick, gameMenuButtonRef }) => {
+const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSettingsClick, gameMenuButtonRef, layout }) => {
     const {
         Board, Card, stock, waste, foundations, tableau, history, isWon, isRulesModalOpen, shakeCardId, pressedStack, hint, moves, time, isPaused, turnMode, autoplayMode,
         cardSize, shuffleClass, isDealing, dealAnimationCards, animationData, returnAnimationData, stockAnimationData, dragGhost, dragSourceInfo, hiddenCardIds, foundationFx,
@@ -26,13 +27,17 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
         mainContainerRef, stockRef, wasteRef, foundationRefs, tableauRefs, initialDeckRef, formatTime
     } = controller;
     
-    return (
-        <Board shuffleClass={shuffleClass}>
-             {isWon && <WinModal onPlayAgain={initializeGame} />}
-             {isRulesModalOpen && <RulesModal game="klondike" onClose={() => setIsRulesModalOpen(false)} />}
-             {isPaused && <PauseModal onResume={() => setIsPaused(false)} />}
+    const renderCommonOverlays = () => (
+        <>
+            {isWon && <WinModal onPlayAgain={initializeGame} />}
+            {isRulesModalOpen && <RulesModal game="klondike" onClose={() => setIsRulesModalOpen(false)} />}
+            {isPaused && <PauseModal onResume={() => setIsPaused(false)} />}
+        </>
+    );
 
-             {dealAnimationCards.map(({ card, key, style }) => (
+    const renderCommonAnimations = () => (
+        <>
+            {dealAnimationCards.map(({ card, key, style }) => (
                 <div key={key} className="deal-card" style={style}>
                     <Card card={card} width={cardSize.width} height={cardSize.height} />
                 </div>
@@ -144,7 +149,21 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                     } as React.CSSProperties}
                     onAnimationEnd={handleAnimationEnd}
                  >
-                    <Card card={animationData.card} width={cardSize.width} height={cardSize.height}/>
+                    <div style={{ position: 'relative', width: cardSize.width, height: cardSize.height }}>
+                        {animationData.cards.map((card, index) => (
+                            <Card 
+                                key={card.id}
+                                card={card} 
+                                width={cardSize.width} 
+                                height={cardSize.height}
+                                style={{
+                                    position: 'absolute',
+                                    top: `${index * cardSize.faceUpStackOffset}px`,
+                                    left: 0,
+                                }}
+                            />
+                        ))}
+                    </div>
                  </div>
              )}
 
@@ -207,8 +226,140 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                     </div>
                 </div>
             )}
+        </>
+    );
 
-            <div className="max-w-7xl mx-auto w-full flex-shrink-0">
+    const renderTableau = () => (
+        <div className={`flex flex-nowrap justify-center ${layout === 'landscape' ? 'gap-4' : 'gap-2'}`}>
+            {tableau.map((pile, pileIndex) => {
+                const cardTops = pile.reduce((acc: number[], _card, index) => {
+                    if (index === 0) acc.push(0);
+                    else {
+                        const prevCard = pile[index-1];
+                        acc.push(acc[index-1] + (prevCard.faceUp ? cardSize.faceUpStackOffset : cardSize.faceDownStackOffset));
+                    }
+                    return acc;
+                }, []);
+                const pileHeight = pile.length > 0 ? cardTops[pile.length - 1] + cardSize.height : cardSize.height;
+                const areAllCardsInPileDragging = 
+                    dragSourceInfo?.source === 'tableau' && 
+                    dragSourceInfo.sourcePileIndex === pileIndex && 
+                    dragSourceInfo.cards.length === pile.length;
+
+                return (
+                    <div key={pileIndex} className="relative" ref={el => { tableauRefs.current[pileIndex] = el; }} data-pile-id={`tableau-${pileIndex}`}>
+                        {(pile.length === 0 || areAllCardsInPileDragging) ? <EmptyPile width={cardSize.width} height={cardSize.height}/> :
+                            pile.map((card, cardIndex) => {
+                                const isCardDragging = !!dragSourceInfo?.cards.some(c => c.id === card.id);
+                                const isCardPressed = !!pressedStack && 
+                                    pressedStack.source === 'tableau' && 
+                                    pressedStack.sourcePileIndex === pileIndex &&
+                                    cardIndex >= pressedStack.sourceCardIndex;
+                                
+                                return (hiddenCardIds.includes(card.id)) ?
+                                <div key={card.id} style={{ position: 'absolute', top: `${cardTops[cardIndex]}px`, left: 0, width: cardSize.width, height: cardSize.height }} /> :
+                                <Card
+                                    key={card.id}
+                                    card={card}
+                                    onMouseDown={(e) => handleMouseDown(e, 'tableau', pileIndex, cardIndex)}
+                                    width={cardSize.width} height={cardSize.height}
+                                    style={{ position: 'absolute', top: `${cardTops[cardIndex]}px`, left: 0, zIndex: cardIndex + (isCardPressed ? 20 : 0) }}
+                                    isDragging={isCardDragging}
+                                    isShaking={shakeCardId === card.id}
+                                    isPressed={isCardPressed}
+                                    isHinted={hint?.type === 'card' && hint.cardId === card.id}
+                                />
+                            })
+                        }
+                        <div style={{ height: `${pileHeight}px`, width: `${cardSize.width}px` }}></div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+
+    const renderFoundations = () => (
+        <div className={`flex ${layout === 'landscape' ? 'gap-4' : 'gap-2'}`}>
+            {foundations.map((pile, i) => {
+                const isTopCardDragging = dragSourceInfo?.source === 'foundation' && dragSourceInfo.sourcePileIndex === i;
+                const isTopCardPressed = !!pressedStack && pressedStack.source === 'foundation' && pressedStack.sourcePileIndex === i;
+                const topCard = pile[pile.length - 1];
+                return (
+                    <div key={i} ref={el => { foundationRefs.current[i] = el; }} className="relative" style={{ width: cardSize.width, height: cardSize.height }}>
+                        {(pile.length === 0 || (pile.length === 1 && isTopCardDragging)) &&
+                            <EmptyPile width={cardSize.width} height={cardSize.height}>
+                                <div className={`text-5xl ${SUIT_COLOR_MAP[SUITS[i]] === 'red' ? 'text-red-400/60' : 'text-white/30'} font-thin`}>
+                                    {SUIT_SYMBOL_MAP[SUITS[i]]}
+                                </div>
+                            </EmptyPile>
+                        }
+                        {pile.length > 1 && isTopCardDragging &&
+                            <Card card={pile[pile.length - 2]} width={cardSize.width} height={cardSize.height}/>
+                        }
+
+                        {topCard && 
+                            <div className="absolute top-0 left-0">
+                                <Card 
+                                    card={topCard} 
+                                    onMouseDown={(e) => handleMouseDown(e, 'foundation', i, pile.length - 1)} 
+                                    width={cardSize.width} 
+                                    height={cardSize.height}
+                                    isDragging={isTopCardDragging}
+                                    isPressed={isTopCardPressed}
+                                    isHinted={hint?.type === 'card' && hint.cardId === topCard.id}
+                                />
+                            </div>
+                        }
+                        {foundationFx?.index === i && (
+                            <div className="absolute inset-0 pointer-events-none z-10">
+                                {Array.from({ length: 8 }).map((_, j) => {
+                                    const angle = (j / 8) * 2 * Math.PI;
+                                    const radius = 50 + Math.random() * 30;
+                                    const color = ['#fde047', '#f9a8d4', '#a7f3d0'][j % 3];
+                                    return (
+                                        <div 
+                                            key={`star-${j}`} 
+                                            className="cute-star"
+                                            style={{
+                                                '--tx': `${Math.cos(angle) * radius}px`,
+                                                '--ty': `${Math.sin(angle) * radius}px`,
+                                                '--color': color,
+                                                'animationDelay': `${Math.random() * 0.2}s`,
+                                            } as React.CSSProperties}
+                                        />
+                                    );
+                                })}
+                                {Array.from({ length: 5 }).map((_, j) => {
+                                    const angle = (Math.random() - 0.5) * (Math.PI / 2);
+                                    const radius = 40 + Math.random() * 30;
+                                    return (
+                                        <div
+                                            key={`heart-${j}`}
+                                            className="heart-particle"
+                                            style={{
+                                                '--tx': `${Math.sin(angle) * radius}px`,
+                                                '--ty': `${-Math.cos(angle) * radius}px`,
+                                                'animationDelay': `${Math.random() * 0.25}s`,
+                                            } as React.CSSProperties}
+                                        >
+                                            ♥
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+    
+    return (
+        <Board shuffleClass={shuffleClass}>
+             {renderCommonOverlays()}
+             {renderCommonAnimations()}
+
+             <div className="max-w-7xl mx-auto w-full flex-shrink-0 px-2 sm:px-4">
                 <GameHeader
                     title="Klondike"
                     time={time}
@@ -218,181 +369,99 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                     onPauseClick={() => setIsPaused(true)}
                     formatTime={formatTime}
                     gameMenuButtonRef={gameMenuButtonRef}
+                    layout={layout}
                 >
-                    <div className="flex-grow flex justify-center items-center flex-wrap gap-x-6 gap-y-2">
-                        <div className="relative group">
-                             <button onClick={handleTurnModeToggle} className="bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition duration-200 disabled:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed">Turn: {turnMode}</button>
-                             <div className="absolute top-full mt-2 w-48 bg-black/80 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-center left-1/2 -translate-x-1/2 z-20">
-                                Toggle between drawing 1 or 3 cards from the stock.
+                    {layout === 'landscape' && (
+                        <div className="flex-grow flex justify-center items-center flex-wrap gap-x-6 gap-y-2">
+                            <div className="relative group">
+                                <button onClick={handleTurnModeToggle} className="bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition duration-200 disabled:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed">Turn: {turnMode}</button>
+                                <div className="absolute top-full mt-2 w-48 bg-black/80 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-center left-1/2 -translate-x-1/2 z-20">
+                                    Toggle between drawing 1 or 3 cards from the stock.
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
                 </GameHeader>
             </div>
             
-            <div className="w-full flex-1 overflow-y-auto min-h-0">
-                <main ref={mainContainerRef} className="max-w-7xl mx-auto w-full pt-4 pb-4">
-                    <div className="flex flex-wrap justify-between gap-4 mb-8">
-                        <div className="flex gap-4">
+            {layout === 'landscape' ? (
+                <div className="w-full flex-1 overflow-y-auto min-h-0">
+                    <main ref={mainContainerRef} className="max-w-7xl mx-auto w-full pt-4 pb-4 px-2 sm:px-4">
+                        <div className="flex flex-wrap justify-between gap-4 mb-8">
+                            <div className="flex gap-4">
+                                <div ref={stockRef} onClick={handleStockClick} className={`cursor-pointer ${hint?.type === 'stock' ? 'stock-hint' : ''}`}>
+                                    {stock.length > 0 ? <Card card={stock[stock.length - 1]} width={cardSize.width} height={cardSize.height} /> : <EmptyPile width={cardSize.width} height={cardSize.height}>
+                                        <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5V4H4zm0 12v5h5v-5H4zM15 4v5h5V4h-5zm0 12v5h5v-5h-5z" /></svg>
+                                    </EmptyPile>}
+                                </div>
+                                <div ref={wasteRef} className="relative" style={{ width: cardSize.width, height: cardSize.height }}>
+                                    <EmptyPile width={cardSize.width} height={cardSize.height}/>
+                                    {(() => {
+                                        const stationaryWasteCards = waste.filter(c => !hiddenCardIds.includes(c.id));
+                                        const displayableWaste = stationaryWasteCards.slice(0, 3);
+                                        const trueTopCard = waste[0];
+
+                                        return displayableWaste.map((card, index) => {
+                                            const isInteractive = card.id === trueTopCard?.id;
+                                            const offset = (displayableWaste.length - 1 - index) * 12;
+                                            const isPressed = !!pressedStack && pressedStack.source === 'waste' && pressedStack.sourcePileIndex === 0;
+
+                                            return (
+                                                <div key={card.id} className="absolute top-0" style={{left: `${offset}px`}}>
+                                                    <Card 
+                                                        card={card} 
+                                                        onMouseDown={(e) => isInteractive && handleMouseDown(e, 'waste', 0, 0)}
+                                                        width={cardSize.width} 
+                                                        height={cardSize.height}
+                                                        isDragging={isInteractive && dragSourceInfo?.source === 'waste'}
+                                                        isPressed={isPressed}
+                                                        isHinted={hint?.type === 'card' && hint.cardId === card.id}
+                                                    />
+                                                </div>
+                                            );
+                                        }).reverse();
+                                    })()}
+                                </div>
+                            </div>
+                            {renderFoundations()}
+                        </div>
+                        {renderTableau()}
+                    </main>
+                </div>
+            ) : ( // Portrait Layout
+                <main ref={mainContainerRef} className="w-full flex-1 min-h-0 flex flex-col pt-2 pb-4 px-2">
+                    <div className="flex justify-between">
+                        <div className="flex gap-2">
                             <div ref={stockRef} onClick={handleStockClick} className={`cursor-pointer ${hint?.type === 'stock' ? 'stock-hint' : ''}`}>
-                                {stock.length > 0 ? <Card card={stock[stock.length - 1]} width={cardSize.width} height={cardSize.height} /> : <EmptyPile width={cardSize.width} height={cardSize.height}>
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-white/50" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5V4H4zm0 12v5h5v-5H4zM15 4v5h5V4h-5zm0 12v5h5v-5h-5z" /></svg>
-                                </EmptyPile>}
+                                {stock.length > 0 ? <Card card={stock[stock.length - 1]} width={cardSize.width} height={cardSize.height} /> : <EmptyPile width={cardSize.width} height={cardSize.height} />}
                             </div>
                             <div ref={wasteRef} className="relative" style={{ width: cardSize.width, height: cardSize.height }}>
                                 <EmptyPile width={cardSize.width} height={cardSize.height}/>
-                                {(() => {
-                                    const stationaryWasteCards = waste.filter(c => !hiddenCardIds.includes(c.id));
-                                    const displayableWaste = stationaryWasteCards.slice(0, 3);
-                                    const trueTopCard = waste[0];
-
-                                    return displayableWaste.map((card, index) => {
-                                        const isInteractive = card.id === trueTopCard?.id;
-                                        const offset = (displayableWaste.length - 1 - index) * 12;
-                                        const isPressed = !!pressedStack && pressedStack.source === 'waste' && pressedStack.sourcePileIndex === 0;
-
-                                        return (
-                                            <div key={card.id} className="absolute top-0" style={{left: `${offset}px`}}>
-                                                <Card 
-                                                    card={card} 
-                                                    onMouseDown={(e) => isInteractive && handleMouseDown(e, 'waste', 0, 0)}
-                                                    width={cardSize.width} 
-                                                    height={cardSize.height}
-                                                    isDragging={isInteractive && dragSourceInfo?.source === 'waste'}
-                                                    isPressed={isPressed}
-                                                    isHinted={hint?.type === 'card' && hint.cardId === card.id}
-                                                />
-                                            </div>
-                                        );
-                                    }).reverse();
-                                })()}
+                                {waste.slice(0,1).map(card => (
+                                    <div key={card.id} className="absolute top-0 left-0">
+                                        <Card 
+                                            card={card} 
+                                            onMouseDown={(e) => handleMouseDown(e, 'waste', 0, 0)}
+                                            width={cardSize.width} 
+                                            height={cardSize.height}
+                                            isDragging={dragSourceInfo?.source === 'waste'}
+                                            isPressed={!!pressedStack && pressedStack.source === 'waste'}
+                                            isHinted={hint?.type === 'card' && hint.cardId === card.id}
+                                        />
+                                    </div>
+                                ))}
                             </div>
                         </div>
-
-                        <div className="flex gap-4">
-                            {foundations.map((pile, i) => {
-                                const isTopCardDragging = dragSourceInfo?.source === 'foundation' && dragSourceInfo.sourcePileIndex === i;
-                                const isTopCardPressed = !!pressedStack && pressedStack.source === 'foundation' && pressedStack.sourcePileIndex === i;
-                                const topCard = pile[pile.length - 1];
-                                return (
-                                    <div key={i} ref={el => { foundationRefs.current[i] = el; }} className="relative" style={{ width: cardSize.width, height: cardSize.height }}>
-                                        {(pile.length === 0 || (pile.length === 1 && isTopCardDragging)) &&
-                                            <EmptyPile width={cardSize.width} height={cardSize.height}>
-                                                <div className={`text-5xl ${SUIT_COLOR_MAP[SUITS[i]] === 'red' ? 'text-red-400/60' : 'text-white/30'} font-thin`}>
-                                                    {SUIT_SYMBOL_MAP[SUITS[i]]}
-                                                </div>
-                                            </EmptyPile>
-                                        }
-                                        {pile.length > 1 && isTopCardDragging &&
-                                            <Card card={pile[pile.length - 2]} width={cardSize.width} height={cardSize.height}/>
-                                        }
-
-                                        {topCard && 
-                                            <div className="absolute top-0 left-0">
-                                                <Card 
-                                                    card={topCard} 
-                                                    onMouseDown={(e) => handleMouseDown(e, 'foundation', i, pile.length - 1)} 
-                                                    width={cardSize.width} 
-                                                    height={cardSize.height}
-                                                    isDragging={isTopCardDragging}
-                                                    isPressed={isTopCardPressed}
-                                                    isHinted={hint?.type === 'card' && hint.cardId === topCard.id}
-                                                />
-                                            </div>
-                                        }
-                                        {foundationFx?.index === i && (
-                                            <div className="absolute inset-0 pointer-events-none z-10">
-                                                {Array.from({ length: 8 }).map((_, j) => {
-                                                    const angle = (j / 8) * 2 * Math.PI;
-                                                    const radius = 50 + Math.random() * 30;
-                                                    const color = ['#fde047', '#f9a8d4', '#a7f3d0'][j % 3];
-                                                    return (
-                                                        <div 
-                                                            key={`star-${j}`} 
-                                                            className="cute-star"
-                                                            style={{
-                                                                '--tx': `${Math.cos(angle) * radius}px`,
-                                                                '--ty': `${Math.sin(angle) * radius}px`,
-                                                                '--color': color,
-                                                                'animationDelay': `${Math.random() * 0.2}s`,
-                                                            } as React.CSSProperties}
-                                                        />
-                                                    );
-                                                })}
-                                                {Array.from({ length: 5 }).map((_, j) => {
-                                                    const angle = (Math.random() - 0.5) * (Math.PI / 2);
-                                                    const radius = 40 + Math.random() * 30;
-                                                    return (
-                                                        <div
-                                                            key={`heart-${j}`}
-                                                            className="heart-particle"
-                                                            style={{
-                                                                '--tx': `${Math.sin(angle) * radius}px`,
-                                                                '--ty': `${-Math.cos(angle) * radius}px`,
-                                                                'animationDelay': `${Math.random() * 0.25}s`,
-                                                            } as React.CSSProperties}
-                                                        >
-                                                            ♥
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })}
-                        </div>
+                        {renderFoundations()}
                     </div>
-
-                    <div className="flex flex-nowrap gap-4 justify-center">
-                        {tableau.map((pile, pileIndex) => {
-                            const cardTops = pile.reduce((acc: number[], _card, index) => {
-                                if (index === 0) acc.push(0);
-                                else {
-                                    const prevCard = pile[index-1];
-                                    acc.push(acc[index-1] + (prevCard.faceUp ? cardSize.faceUpStackOffset : cardSize.faceDownStackOffset));
-                                }
-                                return acc;
-                            }, []);
-                            const pileHeight = pile.length > 0 ? cardTops[pile.length - 1] + cardSize.height : cardSize.height;
-                            const areAllCardsInPileDragging = 
-                                dragSourceInfo?.source === 'tableau' && 
-                                dragSourceInfo.sourcePileIndex === pileIndex && 
-                                dragSourceInfo.cards.length === pile.length;
-
-                            return (
-                                <div key={pileIndex} className="relative" ref={el => { tableauRefs.current[pileIndex] = el; }} data-pile-id={`tableau-${pileIndex}`}>
-                                    {(pile.length === 0 || areAllCardsInPileDragging) ? <EmptyPile width={cardSize.width} height={cardSize.height}/> :
-                                        pile.map((card, cardIndex) => {
-                                            const isCardDragging = !!dragSourceInfo?.cards.some(c => c.id === card.id);
-                                            const isCardPressed = !!pressedStack && 
-                                                pressedStack.source === 'tableau' && 
-                                                pressedStack.sourcePileIndex === pileIndex &&
-                                                cardIndex >= pressedStack.sourceCardIndex;
-                                            
-                                            return (hiddenCardIds.includes(card.id)) ?
-                                            <div key={card.id} style={{ position: 'absolute', top: `${cardTops[cardIndex]}px`, left: 0, width: cardSize.width, height: cardSize.height }} /> :
-                                            <Card
-                                                key={card.id}
-                                                card={card}
-                                                onMouseDown={(e) => handleMouseDown(e, 'tableau', pileIndex, cardIndex)}
-                                                width={cardSize.width} height={cardSize.height}
-                                                style={{ position: 'absolute', top: `${cardTops[cardIndex]}px`, left: 0, zIndex: cardIndex + (isCardPressed ? 20 : 0) }}
-                                                isDragging={isCardDragging}
-                                                isShaking={shakeCardId === card.id}
-                                                isPressed={isCardPressed}
-                                                isHinted={hint?.type === 'card' && hint.cardId === card.id}
-                                            />
-                                        })
-                                    }
-                                    <div style={{ height: `${pileHeight}px`, width: `${cardSize.width}px` }}></div>
-                                </div>
-                            );
-                        })}
+                    <div className="flex-1 w-full overflow-x-auto overflow-y-hidden min-h-0 pt-4">
+                        {renderTableau()}
                     </div>
                 </main>
-            </div>
+            )}
+
             <GameFooter
+                layout={layout}
                 onNewGame={initializeGame}
                 onUndo={handleUndo}
                 onHint={handleHint}

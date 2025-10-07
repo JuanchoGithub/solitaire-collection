@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { CardType, Theme } from '../../types';
 import { Suit, Rank } from '../../types';
@@ -7,7 +6,7 @@ import { SUITS, RANKS, RANK_VALUE_MAP, SUIT_COLOR_MAP, CARD_ASPECT_RATIO, SUIT_S
 import { useCardDrag } from '../../hooks/useCardDrag';
 
 type AnimationState = {
-  card: CardType;
+  cards: CardType[];
   fromRect: DOMRect;
   toRect: DOMRect;
   destinationType: 'tableau' | 'foundation';
@@ -34,9 +33,10 @@ type DropTarget = 'tableau' | 'foundation';
 
 interface UseKlondikeProps {
     theme: Theme;
+    layout: 'portrait' | 'landscape';
 }
 
-export const useKlondike = ({ theme }: UseKlondikeProps) => {
+export const useKlondike = ({ theme, layout }: UseKlondikeProps) => {
     const { Board, Card } = theme;
 
     // Core Game State
@@ -126,7 +126,7 @@ export const useKlondike = ({ theme }: UseKlondikeProps) => {
             return null;
         },
         onDrop: (dragInfo, target) => {
-            const { cards, source, sourcePileIndex } = dragInfo;
+            const { cards, source, sourcePileIndex, sourceCardIndex } = dragInfo;
             const movedCard = cards[0];
             let moveMade = false;
 
@@ -180,7 +180,7 @@ export const useKlondike = ({ theme }: UseKlondikeProps) => {
                         setTableau(t => {
                             const newTableau = t.map(p => [...p]);
                             const sPile = newTableau[sourcePileIndex];
-                            const movedStack = sPile.splice(sPile.length - cards.length, cards.length);
+                            const movedStack = sPile.splice(sourceCardIndex, cards.length);
                             newTableau[target.index].push(...movedStack);
 
                             if (sPile.length > 0 && !sPile[sPile.length - 1].faceUp) {
@@ -197,30 +197,56 @@ export const useKlondike = ({ theme }: UseKlondikeProps) => {
             const card = cards[0];
             if (source === 'foundation') return;
 
-            const isTopCard = source === 'waste' || (source === 'tableau' && sourceCardIndex === tableau[sourcePileIndex].length - 1);
-            if (!isTopCard) {
-                const blockingCard = tableau[sourcePileIndex][sourceCardIndex + 1];
-                if (blockingCard) {
-                    setShakeCardId(blockingCard.id);
-                    setTimeout(() => setShakeCardId(null), 400);
+            const triggerAnimation = (destinationType: 'tableau' | 'foundation', destinationIndex: number, toRect: DOMRect) => {
+                animationEndHandled.current = false;
+                setHiddenCardIds(cards.map(c => c.id));
+                setAnimationData({ cards, fromRect: element.getBoundingClientRect(), toRect, destinationType, destinationIndex, source, sourcePileIndex, sourceCardIndex });
+                setIsAnimating(true);
+            };
+
+            // Priority 1: Move to foundation (only single cards)
+            if (cards.length === 1) {
+                for (let i = 0; i < foundations.length; i++) {
+                    const pile = foundations[i];
+                    const topCard = pile.length > 0 ? pile[pile.length - 1] : null;
+                    if (card.suit === SUITS[i] && (
+                        (!topCard && card.rank === Rank.ACE) ||
+                        (topCard && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[topCard.rank] + 1)
+                    )) {
+                        const toRect = foundationRefs.current[i]?.getBoundingClientRect();
+                        if (toRect) {
+                            triggerAnimation('foundation', i, toRect);
+                            return;
+                        }
+                    }
                 }
-                return;
             }
 
-            for (let i = 0; i < foundations.length; i++) {
-                const pile = foundations[i];
-                const topCard = pile.length > 0 ? pile[pile.length - 1] : null;
-                if (card.suit === SUITS[i] && (
-                    (!topCard && card.rank === Rank.ACE) ||
-                    (topCard && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[topCard.rank] + 1)
-                )) {
-                    const toRect = foundationRefs.current[i]?.getBoundingClientRect();
-                    if (toRect) {
-                        animationEndHandled.current = false;
-                        setRecentlyMovedFromFoundation(null);
-                        setHiddenCardIds([card.id]);
-                        setAnimationData({ card, fromRect: element.getBoundingClientRect(), toRect, destinationType: 'foundation', destinationIndex: i, source, sourcePileIndex, sourceCardIndex });
-                        setTimeout(() => setIsAnimating(true), 10);
+            // Priority 2: Move to tableau
+            for (let i = 0; i < tableau.length; i++) {
+                if (source === 'tableau' && sourcePileIndex === i) continue;
+
+                const destPile = tableau[i];
+                const topDestCard = destPile[destPile.length - 1];
+
+                if ((!topDestCard && card.rank === Rank.KING) || 
+                    (topDestCard?.faceUp && SUIT_COLOR_MAP[card.suit] !== SUIT_COLOR_MAP[topDestCard.suit] && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1)) {
+                    
+                    const toEl = tableauRefs.current[i];
+                    if (toEl) {
+                        const parentRect = toEl.getBoundingClientRect();
+                        const cardTops = destPile.reduce((acc: number[], _card, index) => {
+                            if (index === 0) acc.push(0);
+                            else {
+                                const prevCard = destPile[index-1];
+                                acc.push(acc[index-1] + (prevCard.faceUp ? cardSize.faceUpStackOffset : cardSize.faceDownStackOffset));
+                            }
+                            return acc;
+                        }, []);
+                        const topOffset = destPile.length > 0 ? cardTops[destPile.length - 1] + (destPile[destPile.length - 1].faceUp ? cardSize.faceUpStackOffset : cardSize.faceDownStackOffset) : 0;
+                        const toRect = new DOMRect(parentRect.x, parentRect.y + topOffset, parentRect.width, parentRect.height);
+
+                        triggerAnimation('tableau', i, toRect);
                         return;
                     }
                 }
@@ -232,15 +258,24 @@ export const useKlondike = ({ theme }: UseKlondikeProps) => {
         if (!mainContainerRef.current) return;
         const containerWidth = mainContainerRef.current.clientWidth;
         const numPiles = 7;
-        const gap = 16;
-        const minCardWidth = 60;
-        const maxCardWidth = 100;
-        const totalGapWidth = (numPiles - 1) * gap;
-        let newCardWidth = (containerWidth - totalGapWidth) / numPiles;
-        newCardWidth = Math.max(minCardWidth, Math.min(newCardWidth, maxCardWidth));
-        const newCardHeight = newCardWidth * CARD_ASPECT_RATIO;
-        setCardSize({ width: newCardWidth, height: newCardHeight, faceUpStackOffset: newCardHeight / 5.0, faceDownStackOffset: newCardHeight / 12 });
-    }, []);
+    
+        if (layout === 'portrait') {
+            const gap = 8;
+            const totalGapWidth = (numPiles) * gap; // Use numPiles for outer padding
+            const newCardWidth = (containerWidth - totalGapWidth) / numPiles;
+            const newCardHeight = newCardWidth * CARD_ASPECT_RATIO;
+            setCardSize({ width: newCardWidth, height: newCardHeight, faceUpStackOffset: newCardHeight / 5.0, faceDownStackOffset: newCardHeight / 12 });
+        } else { // landscape
+            const gap = 16;
+            const minCardWidth = 60;
+            const maxCardWidth = 100;
+            const totalGapWidth = (numPiles - 1) * gap;
+            let newCardWidth = (containerWidth - totalGapWidth) / numPiles;
+            newCardWidth = Math.max(minCardWidth, Math.min(newCardWidth, maxCardWidth));
+            const newCardHeight = newCardWidth * CARD_ASPECT_RATIO;
+            setCardSize({ width: newCardWidth, height: newCardHeight, faceUpStackOffset: newCardHeight / 5.0, faceDownStackOffset: newCardHeight / 12 });
+        }
+    }, [layout]);
 
     useEffect(() => {
         updateCardSize();
@@ -336,7 +371,7 @@ export const useKlondike = ({ theme }: UseKlondikeProps) => {
                 setTime(0);
             }, dealStartTime + dealDelay + 400);
         }
-    }, [isDealing, cardSize.width, cardSize.faceDownStackOffset]);
+    }, [isDealing, cardSize.width, cardSize.faceDownStackOffset, layout]);
 
 
     useEffect(() => {
@@ -363,7 +398,7 @@ export const useKlondike = ({ theme }: UseKlondikeProps) => {
             if (fromEl && toRect) {
                 animationEndHandled.current = false;
                 setHiddenCardIds([card.id]);
-                setAnimationData({ card, fromRect: fromEl.getBoundingClientRect(), toRect, destinationType, destinationIndex, source, sourcePileIndex, sourceCardIndex });
+                setAnimationData({ cards: [card], fromRect: fromEl.getBoundingClientRect(), toRect, destinationType, destinationIndex, source, sourcePileIndex, sourceCardIndex });
                 setTimeout(() => setIsAnimating(true), 10);
                 return true;
             }
@@ -577,15 +612,19 @@ export const useKlondike = ({ theme }: UseKlondikeProps) => {
         animationEndHandled.current = true;
         saveStateToHistory();
         setMoves(m => m + 1);
-        const { card, destinationType, destinationIndex, source, sourcePileIndex } = animationData;
+        const { cards, destinationType, destinationIndex, source, sourcePileIndex, sourceCardIndex } = animationData;
+        
+        // This logic is similar to onDrop, but for animated moves
         if (destinationType === 'foundation') {
+            const card = cards[0]; // Foundations only take one card at a time in auto-moves
+            setFoundations(f => f.map((pile, i) => i === destinationIndex ? [...pile, card] : pile));
             setFoundationFx({ index: destinationIndex, suit: card.suit });
             setTimeout(() => setFoundationFx(null), 1000);
-            setFoundations(prev => prev.map((p, i) => i === destinationIndex ? [...p, card] : p));
-            if (source === 'waste') setWaste(prev => prev.slice(1));
-            else {
-                setTableau(prev => {
-                    const newTableau = prev.map(p => [...p]);
+
+            if (source === 'waste') setWaste(w => w.slice(1));
+            else if (source === 'tableau') {
+                setTableau(t => {
+                    const newTableau = t.map(p => [...p]);
                     const sPile = newTableau[sourcePileIndex];
                     sPile.pop();
                     if (sPile.length > 0 && !sPile[sPile.length - 1].faceUp) {
@@ -594,7 +633,28 @@ export const useKlondike = ({ theme }: UseKlondikeProps) => {
                     return newTableau;
                 });
             }
+        } else if (destinationType === 'tableau') {
+            if (source === 'waste') {
+                setWaste(w => w.slice(cards.length));
+                setTableau(t => t.map((p, i) => i === destinationIndex ? [...p, ...cards] : p));
+            } else if (source === 'foundation') {
+                setFoundations(f => f.map((p, i) => i === sourcePileIndex ? p.slice(0, -1) : p));
+                setTableau(t => t.map((p, i) => i === destinationIndex ? [...p, ...cards] : p));
+            } else { // tableau to tableau
+                setTableau(t => {
+                    const newTableau = t.map(p => [...p]);
+                    const sPile = newTableau[sourcePileIndex];
+                    const movedStack = sPile.splice(sourceCardIndex, cards.length);
+                    newTableau[destinationIndex].push(...movedStack);
+
+                    if (sPile.length > 0 && !sPile[sPile.length - 1].faceUp) {
+                        sPile[sPile.length - 1] = { ...sPile[sPile.length - 1], faceUp: true };
+                    }
+                    return newTableau;
+                });
+            }
         }
+
         setAnimationData(null);
         setIsAnimating(false);
         setHiddenCardIds([]);

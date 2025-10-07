@@ -1,6 +1,32 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import type { CardType } from '../types';
 
+type LayoutMode = 'landscape' | 'portrait';
+
+export const useResponsiveLayout = () => {
+    const [layout, setLayout] = useState<LayoutMode>('landscape');
+
+    useEffect(() => {
+        const checkLayout = () => {
+            const isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+            const isTall = window.innerHeight / window.innerWidth > 1.1;
+            
+            if ((isTouchDevice && isTall) || window.innerWidth < 640) {
+                setLayout('portrait');
+            } else {
+                setLayout('landscape');
+            }
+        };
+
+        checkLayout();
+        window.addEventListener('resize', checkLayout);
+        return () => window.removeEventListener('resize', checkLayout);
+    }, []);
+
+    return { layout };
+};
+
+
 export type DragInfo<S extends string> = {
   cards: CardType[];
   source: S;
@@ -24,6 +50,7 @@ type InteractionState<S extends string> = {
     sourcePileIndex: number;
     sourceCardIndex: number;
     element: HTMLDivElement;
+    initialRect: DOMRect;
 } | null;
 
 type ReturnAnimationData = {
@@ -73,6 +100,7 @@ export const useCardDrag = <S extends string, T extends string>({
         if (!draggableCards || draggableCards.length === 0) return;
         
         e.preventDefault();
+        const initialRect = e.currentTarget.getBoundingClientRect();
         setPressedStack({ source, sourcePileIndex, sourceCardIndex });
         setInteractionState({
             startX: e.clientX,
@@ -82,6 +110,7 @@ export const useCardDrag = <S extends string, T extends string>({
             sourcePileIndex,
             sourceCardIndex,
             element: e.currentTarget,
+            initialRect,
         });
     };
 
@@ -130,16 +159,7 @@ export const useCardDrag = <S extends string, T extends string>({
             }
             
             if (!moveMade) {
-                // The condition causing the card to unmount is when all cards in a tableau pile are dragged.
-                // In this case, we use the stable parent pile element as the animation target.
-                const sourcePileEl = interactionState.element.parentElement?.querySelector(`[data-pile-id="${interactionState.source}-${interactionState.sourcePileIndex}"]`);
-                let toRect;
-                 if (sourcePileEl) {
-                    toRect = sourcePileEl.getBoundingClientRect();
-                } else {
-                    toRect = interactionState.element.getBoundingClientRect();
-                }
-
+                const toRect = interactionState.initialRect;
                 setReturnAnimationData({
                     cards: dragGhost.cards,
                     from: { x: dragGhost.x, y: dragGhost.y },
