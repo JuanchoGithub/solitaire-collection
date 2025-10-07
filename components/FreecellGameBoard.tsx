@@ -1,6 +1,4 @@
 
-
-
 import React from 'react';
 import type { FreecellController } from '../games/freecell/useFreecell';
 import EmptyPile from './EmptyPile';
@@ -313,7 +311,7 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
                     }
                 }
                 .auto-move-card {
-                    animation: auto-move 0.5s ease-out forwards;
+                    animation: auto-move 0.3s ease-out forwards;
                 }
                 
                 .card-pressed {

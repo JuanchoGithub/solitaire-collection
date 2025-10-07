@@ -503,10 +503,10 @@ export const useKlondike = ({ theme, layout, gameMode }: UseKlondikeProps) => {
         };
         const isGameWinnable = stock.length === 0 && waste.length === 0 && tableau.flat().every(c => c.faceUp);
         if (autoplayMode === 'obvious') {
-            const timeoutId = setTimeout(findAndExecuteFoundationMove, 100);
+            const timeoutId = setTimeout(findAndExecuteFoundationMove, 50);
             return () => clearTimeout(timeoutId);
         } else if (autoplayMode === 'won' && isGameWinnable) {
-            const timeoutId = setTimeout(findAndExecuteFoundationMove, 50);
+            const timeoutId = setTimeout(findAndExecuteFoundationMove, 25);
             return () => clearTimeout(timeoutId);
         }
     }, [autoplayMode, tableau, waste, foundations, stock, isPaused, isAnimating, isDealing, dragGhost, isWon, stockAnimationData, recentlyMovedFromFoundation]);

@@ -362,10 +362,10 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
             return false;
         };
         if (autoplayMode === 'auto') {
-            const timeoutId = setTimeout(findAndExecuteFoundationMove, 200);
+            const timeoutId = setTimeout(findAndExecuteFoundationMove, 50);
             return () => clearTimeout(timeoutId);
         } else if (autoplayMode === 'win') {
-            const intervalId = setInterval(() => { if (!findAndExecuteFoundationMove()) clearInterval(intervalId); }, 100);
+            const intervalId = setInterval(() => { if (!findAndExecuteFoundationMove()) clearInterval(intervalId); }, 50);
             return () => clearInterval(intervalId);
         }
     }, [autoplayMode, tableau, freecells, foundations, isPaused, isAnimating, isDealing, dragGhost, isWon]);

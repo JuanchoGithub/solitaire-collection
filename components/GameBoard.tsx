@@ -531,7 +531,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                     }
                 }
                 .auto-move-card {
-                    animation: auto-move 0.5s ease-out forwards;
+                    animation: auto-move 0.3s ease-out forwards;
                 }
                 
                 @keyframes return-card {
