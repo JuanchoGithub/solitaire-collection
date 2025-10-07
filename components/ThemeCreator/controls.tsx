@@ -95,3 +95,25 @@ export const ToggleInput: React.FC<ToggleInputProps> = ({ label, value, onChange
         </label>
     </Control>
 );
+
+interface TextAreaInputProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  helpText?: string;
+  rows?: number;
+}
+
+export const TextAreaInput: React.FC<TextAreaInputProps> = ({ label, value, onChange, helpText, rows = 5 }) => (
+  <div className="pt-2">
+    <label className="block text-gray-700 font-semibold mb-2">{label}</label>
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      rows={rows}
+      className="w-full p-2 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500 bg-white text-black font-mono text-sm"
+      placeholder="<svg>...</svg>"
+    />
+    {helpText && <p className="text-xs text-gray-500 mt-1">{helpText}</p>}
+  </div>
+);

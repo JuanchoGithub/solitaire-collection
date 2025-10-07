@@ -1,17 +1,17 @@
+
 import React from 'react';
 import type { CardThemeProps, CardType } from '../../types';
 import { Rank } from '../../types';
-import { SUIT_COLOR_MAP, SUIT_SYMBOL_MAP, RANK_VALUE_MAP } from '../../constants';
+import { SUIT_COLOR_MAP, RANK_VALUE_MAP } from '../../constants';
 import JsonCardBack from './JsonCardBack';
-import type { JsonTheme, PipsProps } from './types';
+import type { JsonTheme, PipsProps, FaceCardArtConfig } from './types';
 
 interface JsonCardProps extends CardThemeProps {
   theme: JsonTheme['card'];
   cardBackTheme: JsonTheme['cardBack'];
 }
 
-const SuitIcon: React.FC<{ suit: CardType['suit']; className?: string; style?: React.CSSProperties; redColor: string; blackColor: string; }> = ({ suit, className, style, redColor, blackColor }) => {
-    const symbol = SUIT_SYMBOL_MAP[suit];
+const SuitIcon: React.FC<{ symbol: string; suit: CardType['suit']; className?: string; style?: React.CSSProperties; redColor: string; blackColor: string; }> = ({ symbol, suit, className, style, redColor, blackColor }) => {
     const color = SUIT_COLOR_MAP[suit] === 'red' ? redColor : blackColor;
     return (
         <svg viewBox="0 0 10 10" className={className} style={style} fill={color}><text x="5" y="8" textAnchor="middle" fontSize="10">{symbol}</text></svg>
@@ -19,11 +19,11 @@ const SuitIcon: React.FC<{ suit: CardType['suit']; className?: string; style?: R
 };
 
 // Adapted from FullyCard.tsx to be data-driven
-const Pips: React.FC<PipsProps> = ({ rank, suit, redColor, blackColor, pipSize }) => {
+const Pips: React.FC<PipsProps> = ({ rank, suit, redColor, blackColor, pipSize, suitIcons }) => {
     const rankValue = RANK_VALUE_MAP[rank];
     if (rankValue > 10 || rankValue < 2) return null;
 
-    const pip = <SuitIcon suit={suit} redColor={redColor} blackColor={blackColor} className="w-full h-full" />;
+    const pip = <SuitIcon symbol={suitIcons[suit]} suit={suit} redColor={redColor} blackColor={blackColor} className="w-full h-full" />;
     const getPipStyle = (y: number, x: number, rotated = false): React.CSSProperties => ({
         position: 'absolute', top: `${y * 100}%`, left: `${x * 100}%`,
         width: pipSize, height: pipSize,
@@ -44,6 +44,34 @@ const Pips: React.FC<PipsProps> = ({ rank, suit, redColor, blackColor, pipSize }
     return (
         <div className="relative w-full h-full p-4">
             {layouts[rankValue].map((style, i) => <div key={i} style={style}>{pip}</div>)}
+        </div>
+    );
+};
+
+const FaceCardArt: React.FC<{ rank: Rank.JACK | Rank.QUEEN | Rank.KING, theme: JsonTheme['card'] }> = ({ rank, theme }) => {
+    const config = theme.faceCardArt[rank];
+    if (!config || config.type === 'none') return null;
+
+    const artStyle: React.CSSProperties = {
+        position: 'absolute',
+        top: config.position.y,
+        left: config.position.x,
+        width: config.size.width,
+        height: config.size.height,
+        transform: 'translate(-50%, -50%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+    };
+
+    if (config.type === 'svg') {
+        return <div style={artStyle} dangerouslySetInnerHTML={{ __html: config.content }} />;
+    }
+
+    // emoji or ascii
+    return (
+        <div style={artStyle}>
+            <span style={{ fontSize: `min(${config.size.width}, ${config.size.height})`, lineHeight: 1 }}>{config.content}</span>
         </div>
     );
 };
@@ -107,12 +135,38 @@ const JsonCard: React.FC<JsonCardProps> = ({ card, onMouseDown, style, isDraggin
         <div style={cornerStyle}>
             <div className={`font-bold leading-none text-center`} style={{ fontSize: theme.rankFontSize }}>{rank}</div>
             {theme.cornerLayout !== 'none' && (
-                <SuitIcon suit={suit} redColor={theme.redColor} blackColor={theme.blackColor} style={{ width: theme.cornerSuitSize, height: theme.cornerSuitSize }} />
+                <SuitIcon symbol={theme.suitIcons[suit]} suit={suit} redColor={theme.redColor} blackColor={theme.blackColor} style={{ width: theme.cornerSuitSize, height: theme.cornerSuitSize }} />
             )}
         </div>
       );
   };
   
+  const renderCenterContent = () => {
+    if (rank === Rank.JACK || rank === Rank.QUEEN || rank === Rank.KING) {
+        const faceArt = <FaceCardArt rank={rank} theme={theme} />;
+        if (faceArt) return faceArt;
+    }
+    if (theme.pipsLayout === 'standard' && rankValue > 1 && rankValue < 11) {
+        return (
+            <div className="w-full h-full" style={{ transform: `scale(${theme.pipsGridScale})` }}>
+                <Pips rank={rank} suit={suit} redColor={theme.redColor} blackColor={theme.blackColor} pipSize={theme.standardPipSize} suitIcons={theme.suitIcons} />
+            </div>
+        );
+    }
+    // Fallback for single layout, Ace, or face cards with no art
+    return (
+        <div style={{
+            position: 'absolute',
+            top: theme.pipsPosition.y,
+            left: theme.pipsPosition.x,
+            width: theme.pipsSize,
+            height: theme.pipsSize,
+            transform: 'translate(-50%, -50%)',
+        }}>
+            <SuitIcon symbol={theme.suitIcons[suit]} suit={suit} redColor={theme.redColor} blackColor={theme.blackColor} className="w-full h-full" />
+        </div>
+    );
+  };
 
   return (
     <div
@@ -123,14 +177,8 @@ const JsonCard: React.FC<JsonCardProps> = ({ card, onMouseDown, style, isDraggin
     >
       {theme.showTopCorner && <Corner position="top" />}
 
-      <div className="flex-grow flex items-center justify-center p-2">
-        { theme.pipsLayout === 'standard' && rankValue > 1 && rankValue < 11 ?
-            <div className="w-full h-full" style={{ transform: `scale(${theme.pipsGridScale})` }}>
-                <Pips rank={rank} suit={suit} redColor={theme.redColor} blackColor={theme.blackColor} pipSize={theme.standardPipSize} />
-            </div>
-            :
-            <SuitIcon suit={suit} redColor={theme.redColor} blackColor={theme.blackColor} style={{ width: theme.pipsSize, height: theme.pipsSize }} />
-        }
+      <div className="flex-grow flex items-center justify-center p-2 relative">
+          {renderCenterContent()}
       </div>
       
       {theme.showBottomCorner && <Corner position="bottom" />}

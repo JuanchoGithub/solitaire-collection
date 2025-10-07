@@ -1,4 +1,12 @@
-import type { CardType } from '../../types';
+
+import type { CardType, Rank } from '../../types';
+
+export interface FaceCardArtConfig {
+    type: 'svg' | 'emoji' | 'ascii' | 'none';
+    content: string;
+    position: { x: string; y: string };
+    size: { width: string; height: string };
+}
 
 export interface JsonTheme {
   name: string;
@@ -10,6 +18,9 @@ export interface JsonTheme {
     backgroundColor: string;
     borderColor: string;
     patternColor: string;
+    patternType: 'default' | 'svg' | 'ascii' | 'emoji';
+    svgContent: string;
+    patternCharacter: string;
   };
   card: {
     backgroundColor: string;
@@ -28,6 +39,7 @@ export interface JsonTheme {
     // New center pips properties
     pipsLayout: 'single' | 'standard';
     pipsSize: string; // Size of the single pip icon
+    pipsPosition: { x: string; y: string }; // Position for single pip icon
     pipsGridScale: string; // Scale of the container for standard pips
     standardPipSize: string; // Size of individual pips in standard layout
 
@@ -37,6 +49,21 @@ export interface JsonTheme {
     cornerLayout: 'horizontal' | 'vertical' | 'none';
     cornerSuitSize: string;
     cornerPadding: string;
+    
+    // Custom suit icons
+    suitIcons: {
+        HEARTS: string;
+        DIAMONDS: string;
+        CLUBS: string;
+        SPADES: string;
+    };
+    
+    // Custom face card art
+    faceCardArt: {
+        [Rank.JACK]: FaceCardArtConfig;
+        [Rank.QUEEN]: FaceCardArtConfig;
+        [Rank.KING]: FaceCardArtConfig;
+    }
   };
 }
 
@@ -47,4 +74,5 @@ export interface PipsProps {
     redColor: string;
     blackColor: string;
     pipSize: string;
+    suitIcons: JsonTheme['card']['suitIcons'];
 }
