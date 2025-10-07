@@ -1,10 +1,11 @@
+
 import React from 'react';
 import type { SpiderSuitCount } from '../games/spider/types';
 
 interface GameSelectionModalProps {
   onClose: () => void;
-  onSelectGame: (selection: 'klondike' | { game: 'spider', suits: SpiderSuitCount }) => void;
-  activeGame: 'spider' | 'klondike';
+  onSelectGame: (selection: 'klondike' | 'freecell' | { game: 'spider', suits: SpiderSuitCount }) => void;
+  activeGame: 'spider' | 'klondike' | 'freecell';
   activeSpiderSuitCount: SpiderSuitCount;
 }
 
@@ -54,6 +55,12 @@ const GameSelectionModal: React.FC<GameSelectionModalProps> = ({ onClose, onSele
                 className={`${buttonBaseClasses} ${activeGame === 'klondike' ? activeButtonClasses : inactiveButtonClasses}`}
             >
                 Klondike (Turn 3)
+            </button>
+            <button
+                onClick={() => onSelectGame('freecell')}
+                className={`${buttonBaseClasses} ${activeGame === 'freecell' ? activeButtonClasses : inactiveButtonClasses}`}
+            >
+                Freecell
             </button>
         </div>
       </div>

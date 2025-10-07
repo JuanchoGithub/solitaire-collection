@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { CardType, Theme } from '../../types';
 import { Suit, Rank } from '../../types';
@@ -232,7 +233,6 @@ export const useSpider = ({ theme, suitCount }: UseSpiderProps) => {
                     style: {
                         '--from-top': `${fromRect.top}px`,
                         '--from-left': `${fromRect.left}px`,
-                        // FIX: Use `toStockRect` instead of `toRect` which is not defined in this scope.
                         '--to-top': `${toStockRect.top}px`,
                         '--to-left': `${toStockRect.left}px`,
                         animationDelay: `${dealStartTime + dealDelay}ms`,

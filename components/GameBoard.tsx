@@ -30,7 +30,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
     return (
         <Board shuffleClass={shuffleClass}>
              {isWon && <WinModal onPlayAgain={initializeGame} />}
-             {isRulesModalOpen && <RulesModal onClose={() => setIsRulesModalOpen(false)} />}
+             {isRulesModalOpen && <RulesModal game="klondike" onClose={() => setIsRulesModalOpen(false)} />}
              {isPaused && <PauseModal onResume={() => setIsPaused(false)} />}
 
              {dealAnimationCards.map(({ card, key, style }) => (

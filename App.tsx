@@ -2,22 +2,27 @@
 import React, { useState, useCallback } from 'react';
 import Spider from './games/spider/Spider';
 import Klondike from './games/klondike/Klondike';
+import Freecell from './games/freecell/Freecell';
 import GameSelectionModal from './components/GameSelectionModal';
 import SettingsModal from './components/SettingsModal';
 import { THEMES, ThemeKey } from './themes';
 import type { SpiderSuitCount } from './games/spider/types';
 
 const App: React.FC = () => {
-    const [currentGame, setCurrentGame] = useState<'spider' | 'klondike'>('spider');
+    const [currentGame, setCurrentGame] = useState<'spider' | 'klondike' | 'freecell'>('spider');
     const [spiderSuitCount, setSpiderSuitCount] = useState<SpiderSuitCount>(1);
     const [isGameMenuOpen, setIsGameMenuOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [themeKey, setThemeKey] = useState<ThemeKey>('gemini');
 
-    const handleSelectGame = useCallback((selection: 'klondike' | { game: 'spider', suits: SpiderSuitCount }) => {
+    const handleSelectGame = useCallback((selection: 'klondike' | 'freecell' | { game: 'spider', suits: SpiderSuitCount }) => {
         if (selection === 'klondike') {
             if (currentGame !== 'klondike') {
                 setCurrentGame('klondike');
+            }
+        } else if (selection === 'freecell') {
+            if (currentGame !== 'freecell') {
+                setCurrentGame('freecell');
             }
         } else {
             if (currentGame !== 'spider' || spiderSuitCount !== selection.suits) {
@@ -45,6 +50,9 @@ const App: React.FC = () => {
             break;
         case 'klondike':
             gameElement = <Klondike key="klondike" theme={theme} onTitleClick={handleOpenGameMenu} onSettingsClick={handleOpenSettings} />;
+            break;
+        case 'freecell':
+            gameElement = <Freecell key="freecell" theme={theme} onTitleClick={handleOpenGameMenu} onSettingsClick={handleOpenSettings} />;
             break;
         default:
             gameElement = <Spider key={`spider-${spiderSuitCount}`} theme={theme} onTitleClick={handleOpenGameMenu} onSettingsClick={handleOpenSettings} suitCount={spiderSuitCount} />;

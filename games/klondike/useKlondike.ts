@@ -1,5 +1,4 @@
 
-// FIX: Import React to resolve namespace errors for types like React.CSSProperties and React.MouseEvent.
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { CardType, Theme } from '../../types';
 import { Suit, Rank } from '../../types';
