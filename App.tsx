@@ -1,11 +1,14 @@
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import Spider from './games/spider/Spider';
 import Klondike from './games/klondike/Klondike';
 import Freecell from './games/freecell/Freecell';
 import GameSelectionModal from './components/GameSelectionModal';
 import SettingsModal from './components/SettingsModal';
-import { THEMES, ThemeKey } from './themes';
+import ThemeCreatorModal from './components/ThemeCreator/ThemeCreatorModal';
+import { BASE_THEMES, ThemeKey } from './themes';
+import type { JsonTheme } from './themes/json/types';
+import { createThemeFromJson } from './themes/json/loader';
 import type { SpiderSuitCount } from './games/spider/types';
 
 const App: React.FC = () => {
@@ -13,8 +16,36 @@ const App: React.FC = () => {
     const [spiderSuitCount, setSpiderSuitCount] = useState<SpiderSuitCount>(1);
     const [isGameMenuOpen, setIsGameMenuOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+    const [isThemeCreatorOpen, setIsThemeCreatorOpen] = useState(false);
+    
+    const [themes, setThemes] = useState(BASE_THEMES);
+    const [userThemeData, setUserThemeData] = useState<JsonTheme | null>(null);
     const [themeKey, setThemeKey] = useState<ThemeKey>('gemini');
+    
     const gameMenuButtonRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        const savedThemeJson = localStorage.getItem('user-custom-theme');
+        if (savedThemeJson) {
+            const themeData = JSON.parse(savedThemeJson);
+            setUserThemeData(themeData);
+            const userTheme = createThemeFromJson(themeData);
+            setThemes(prev => ({
+                ...prev,
+                custom: { name: themeData.name || 'My Theme', theme: userTheme }
+            }));
+        }
+
+        const savedThemeKey = localStorage.getItem('active-theme-key') as ThemeKey;
+        if (savedThemeKey) {
+            // Ensure the saved key is valid, especially for 'custom' theme which might not exist on a fresh start
+            if (savedThemeKey === 'custom' && !savedThemeJson) {
+                setThemeKey('gemini');
+            } else {
+                setThemeKey(savedThemeKey);
+            }
+        }
+    }, []);
 
     const handleSelectGame = useCallback((selection: 'klondike' | 'freecell' | { game: 'spider', suits: SpiderSuitCount }) => {
         if (selection === 'klondike') {
@@ -39,9 +70,29 @@ const App: React.FC = () => {
     
     const handleOpenSettings = useCallback(() => setIsSettingsModalOpen(true), []);
     const handleCloseSettings = useCallback(() => setIsSettingsModalOpen(false), []);
-    const handleSelectTheme = useCallback((key: ThemeKey) => setThemeKey(key), []);
+    const handleSelectTheme = useCallback((key: ThemeKey) => {
+        setThemeKey(key);
+        localStorage.setItem('active-theme-key', key);
+    }, []);
 
-    const theme = THEMES[themeKey].theme;
+    const handleOpenThemeCreator = useCallback(() => {
+        setIsSettingsModalOpen(false);
+        setIsThemeCreatorOpen(true);
+    }, []);
+
+    const handleSaveUserTheme = useCallback((themeData: JsonTheme) => {
+        const userTheme = createThemeFromJson(themeData);
+        localStorage.setItem('user-custom-theme', JSON.stringify(themeData));
+        setUserThemeData(themeData);
+        setThemes(prev => ({
+            ...prev,
+            custom: { name: themeData.name || 'My Theme', theme: userTheme }
+        }));
+        handleSelectTheme('custom');
+        setIsThemeCreatorOpen(false);
+    }, [handleSelectTheme]);
+
+    const theme = themes[themeKey]?.theme || themes.gemini.theme;
     
     const commonProps = {
         theme,
@@ -53,7 +104,6 @@ const App: React.FC = () => {
     let gameElement;
     switch(currentGame) {
         case 'spider':
-            // The key ensures that changing the suit count forces a remount and thus a new game.
             gameElement = <Spider key={`spider-${spiderSuitCount}`} {...commonProps} suitCount={spiderSuitCount} />;
             break;
         case 'klondike':
@@ -84,6 +134,15 @@ const App: React.FC = () => {
                     onClose={handleCloseSettings}
                     onSelectTheme={handleSelectTheme}
                     activeThemeKey={themeKey}
+                    themes={themes}
+                    onOpenThemeCreator={handleOpenThemeCreator}
+                />
+            )}
+            {isThemeCreatorOpen && (
+                <ThemeCreatorModal
+                    onClose={() => setIsThemeCreatorOpen(false)}
+                    onSave={handleSaveUserTheme}
+                    initialTheme={userThemeData}
                 />
             )}
         </>

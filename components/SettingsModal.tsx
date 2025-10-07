@@ -1,13 +1,17 @@
+
 import React from 'react';
-import { THEMES, ThemeKey } from '../themes';
+import { ThemeKey } from '../themes';
 
 interface SettingsModalProps {
   onClose: () => void;
   onSelectTheme: (themeKey: ThemeKey) => void;
   activeThemeKey: ThemeKey;
+  // FIX: Changed themes to be a Partial Record to allow for the custom theme to be optional.
+  themes: Partial<Record<ThemeKey, { name: string, theme: any }>>;
+  onOpenThemeCreator: () => void;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onSelectTheme, activeThemeKey }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onSelectTheme, activeThemeKey, themes, onOpenThemeCreator }) => {
   const buttonBaseClasses = "w-full text-left p-4 rounded-lg text-lg font-semibold transition-all duration-200 ease-in-out transform";
   const activeButtonClasses = "bg-green-600 text-white shadow-lg scale-105";
   const inactiveButtonClasses = "bg-gray-200 hover:bg-green-200 hover:text-green-800 text-gray-700";
@@ -30,16 +34,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onSelectTheme, a
         <div>
             <h3 className="text-xl font-semibold mb-3 text-gray-600">Card Theme</h3>
             <div className="space-y-4">
-                {(Object.keys(THEMES) as ThemeKey[]).map(key => (
+                {(Object.keys(themes) as ThemeKey[]).map(key => (
                     <button
                         key={key}
                         onClick={() => onSelectTheme(key)}
                         className={`${buttonBaseClasses} ${activeThemeKey === key ? activeButtonClasses : inactiveButtonClasses}`}
                     >
-                        {THEMES[key].name}
+                        {/* FIX: Added non-null assertion which is safe because we iterate over existing keys. */}
+                        {themes[key]!.name}
                     </button>
                 ))}
             </div>
+             <div className="border-t my-6"></div>
+            <button
+                onClick={onOpenThemeCreator}
+                className="w-full text-center p-4 rounded-lg text-lg font-semibold transition-all duration-200 ease-in-out bg-blue-500 hover:bg-blue-600 text-white"
+            >
+                Create a Custom Theme
+            </button>
         </div>
       </div>
       <style>{`

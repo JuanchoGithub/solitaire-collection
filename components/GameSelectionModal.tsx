@@ -59,7 +59,7 @@ const GameSelectionModal: React.FC<GameSelectionModalProps> = ({ onClose, onSele
                 onClick={() => onSelectGame('klondike')}
                 className={`${buttonBaseClasses} ${activeGame === 'klondike' ? activeButtonClasses : inactiveButtonClasses}`}
             >
-                Klondike (Turn 3)
+                Klondike
             </button>
             <button
                 onClick={() => onSelectGame('freecell')}

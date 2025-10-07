@@ -1,0 +1,21 @@
+{
+  "name": "Default Data-Driven",
+  "board": {
+    "backgroundColor": "#166534",
+    "textColor": "#ffffff"
+  },
+  "cardBack": {
+    "backgroundColor": "#2563eb",
+    "borderColor": "#1d4ed8",
+    "patternColor": "#ffffff"
+  },
+  "card": {
+    "backgroundColor": "#ffffff",
+    "cornerRadius": "0.5rem",
+    "shadow": "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+    "redColor": "#ef4444",
+    "blackColor": "#000000",
+    "fontFamily": "sans-serif",
+    "rankFontSize": "1.25rem"
+  }
+}
