@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { CardType, Theme } from '../../types';
 import { Suit, Rank } from '../../types';
@@ -490,7 +489,7 @@ export const useSpider = ({ theme, suitCount }: UseSpiderProps) => {
 
     return {
         stock, tableau, completedSets, history, isWon, isRulesModalOpen, shakeStock, pressedStack, hint, moves, time, isPaused, suitCount,
-        cardSize, shuffleClass, isDealing,
+        cardSize, shuffleClass, isDealing, isAnimating,
         dealAnimationCards, animationData, returnAnimationData, stockAnimationData, completedSetAnimation, dragGhost, dragSourceInfo, hiddenCardIds,
         initializeGame, handleUndo, handleStockClick, handleHint, setIsRulesModalOpen, setIsPaused, handleMouseDown, handleAnimationEnd, handleReturnAnimationEnd,
         mainContainerRef, stockRef, tableauRefs, initialDeckRef, completedSetsRef,

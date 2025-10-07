@@ -4,6 +4,8 @@ import EmptyPile from './EmptyPile';
 import WinModal from './WinModal';
 import RulesModal from './RulesModal';
 import PauseModal from './PauseModal';
+import GameHeader from './GameHeader';
+import GameFooter from './GameFooter';
 import { Suit, Rank } from '../types';
 import { SUITS, SUIT_COLOR_MAP, SUIT_SYMBOL_MAP } from '../constants';
 
@@ -22,9 +24,6 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
         mainContainerRef, foundationRefs, tableauRefs, freecellRefs, initialDeckRef, formatTime
     } = controller;
     
-    const buttonClasses = "bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition duration-200 disabled:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed";
-    const iconButtonClasses = "bg-green-700 hover:bg-green-600 text-white font-bold p-2 rounded-lg transition duration-200 disabled:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed";
-
     return (
         <Board shuffleClass={shuffleClass}>
              {isWon && <WinModal onPlayAgain={initializeGame} />}
@@ -133,28 +132,22 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
                 </div>
             )}
 
-            <div className="max-w-7xl mx-auto w-full flex flex-col h-full">
-                <header className={`flex flex-wrap justify-between items-center gap-4 mb-2 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
-                    <h1 onClick={onTitleClick} className="text-2xl sm:text-3xl font-serif tracking-wider cursor-pointer hover:text-green-300 transition-colors" style={{ textShadow: '1px 1px 3px rgba(0,0,0,0.2)'}}>Freecell</h1>
+            <div className="max-w-7xl mx-auto w-full flex-shrink-0">
+                <GameHeader
+                    title="Freecell"
+                    time={time}
+                    moves={moves}
+                    isDealing={isDealing}
+                    onTitleClick={onTitleClick}
+                    onPauseClick={() => setIsPaused(true)}
+                    formatTime={formatTime}
+                >
                     <div className="flex-grow"></div>
-                    <div className="flex items-center gap-x-4 text-lg font-semibold">
-                         <button onClick={() => setIsPaused(true)} className="text-yellow-400 hover:text-yellow-300" aria-label="Pause game">
-                           <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 6a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1zm6 0a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1z" clipRule="evenodd" />
-                           </svg>
-                        </button>
-                        <div className="flex items-center gap-2 tabular-nums">
-                            <span className="text-white/80">Time:</span>
-                            <span className="font-mono w-[5ch] text-left">{formatTime(time)}</span>
-                        </div>
-                        <div className="flex items-center gap-2 tabular-nums">
-                            <span className="text-white/80">Moves:</span>
-                            <span className="font-mono min-w-[4ch] text-left">{moves}</span>
-                        </div>
-                    </div>
-                </header>
-
-                <main ref={mainContainerRef} className="pt-4 flex-grow">
+                </GameHeader>
+            </div>
+            
+            <div className="w-full flex-1 overflow-y-auto min-h-0">
+                <main ref={mainContainerRef} className="max-w-7xl mx-auto w-full pt-4 pb-4">
                      <div className="flex flex-wrap justify-between gap-4 mb-8">
                         <div className="flex gap-4">
                             {freecells.map((card, i) => {
@@ -253,13 +246,18 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
                     </div>
                 </main>
             </div>
-             <footer className={`w-full flex justify-center items-center gap-4 mt-auto p-4 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
-                <button onClick={initializeGame} className={buttonClasses.replace('bg-green-700 hover:bg-green-600', 'bg-blue-600 hover:bg-blue-500')}>New Game</button>
-                <button onClick={handleUndo} disabled={history.length === 0} className={buttonClasses}>Undo</button>
-                <button onClick={handleHint} className={buttonClasses}>Hint</button>
-                <button onClick={() => setIsRulesModalOpen(true)} className={buttonClasses}>Rules</button>
+            <GameFooter
+                onNewGame={initializeGame}
+                onUndo={handleUndo}
+                onHint={handleHint}
+                onRules={() => setIsRulesModalOpen(true)}
+                onSettings={onSettingsClick}
+                isUndoDisabled={history.length === 0}
+                isHintDisabled={isDealing || isPaused || !!animationData}
+                isDealing={isDealing}
+            >
                 <div className="relative group">
-                    <button onClick={handleAutoplayModeToggle} className={buttonClasses}>
+                    <button onClick={handleAutoplayModeToggle} className="bg-green-700 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg transition duration-200">
                         Autoplay: <span className="capitalize">{autoplayMode}</span>
                     </button>
                     <div className="absolute bottom-full mb-2 w-60 bg-black/80 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none text-center left-1/2 -translate-x-1/2 z-20">
@@ -268,13 +266,7 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
                         { autoplayMode === 'win' && 'Finishes the game automatically.' }
                     </div>
                 </div>
-                <button onClick={onSettingsClick} className={iconButtonClasses} aria-label="Settings">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
-                </button>
-            </footer>
+            </GameFooter>
             <style>{`
                 @keyframes deal-card-fly {
                     from { top: var(--from-top); left: var(--from-left); transform: rotate(0deg) scale(1); opacity: 1; }

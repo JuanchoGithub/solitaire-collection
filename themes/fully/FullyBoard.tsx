@@ -7,7 +7,7 @@ interface FullyBoardProps {
 
 const FullyBoard: React.FC<FullyBoardProps> = ({ children, shuffleClass }) => {
     return (
-        <div className={`bg-green-900 min-h-screen text-white p-4 font-sans overflow-x-hidden relative flex flex-col ${shuffleClass}`}>
+        <div className={`bg-green-900 h-screen text-white pt-2 px-4 font-sans overflow-hidden relative flex flex-col ${shuffleClass}`}>
             {children}
         </div>
     );
