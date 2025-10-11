@@ -1,5 +1,5 @@
 {
-  "name": "Spider Solitaire",
-  "description": "A classic Spider Solitaire card game built with a reusable card game engine structure in React. Features smooth animations and a clean, responsive interface.",
+  "name": "Vibe-solitaire",
+  "description": "A classic Solitaire card game built with a reusable card game engine structure in React. Features smooth animations and a clean, responsive interface. Includes Spider, Freecell, Klondike and others.",
   "requestFramePermissions": []
 }
