@@ -35,59 +35,89 @@ type KlondikeMode = 'random' | 'winnable';
 
 const generateWinnableDeal = (): { tableau: CardType[][]; stock: CardType[] } => {
     let cardId = 0;
-    // 1. Start with a solved state, where all cards are on the foundations
-    const tempFoundations: CardType[][] = SUITS.map(suit =>
-        RANKS.map(rank => ({ id: cardId++, suit, rank, faceUp: true }))
-    );
-    const tempTableau: CardType[][] = Array.from({ length: 7 }, () => []);
+    // 1. Start with a shuffled deck.
+    let deck = SUITS.flatMap(suit => RANKS.map(rank => ({ id: cardId++, suit, rank, faceUp: false })));
+    for (let i = deck.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [deck[i], deck[j]] = [deck[j], deck[i]];
+    }
 
-    // 2. Perform a series of reverse moves to shuffle cards from foundations to the tableau
-    // This creates a complex, but solvable, board state.
-    for (let i = 0; i < 150; i++) {
-        const availableFoundations = tempFoundations.map((p, i) => i).filter(i => tempFoundations[i].length > 0);
-        if (availableFoundations.length === 0) break;
+    // 2. Create 7 fully playable, face-up tableau columns in memory.
+    // This ensures that every card has a potential path to being played.
+    const playableTableau: CardType[][] = Array.from({ length: 7 }, () => []);
+    
+    // Prioritize dealing Kings first to act as anchors for longer playable runs.
+    const kings = deck.filter(c => c.rank === Rank.KING);
+    const nonKings = deck.filter(c => c.rank !== Rank.KING);
+    deck = [...kings, ...nonKings];
 
-        const fIndex = availableFoundations[Math.floor(Math.random() * availableFoundations.length)];
-        const cardToMove = tempFoundations[fIndex][tempFoundations[fIndex].length - 1];
-
-        const validTableauSpots = [];
-        for (let tIndex = 0; tIndex < 7; tIndex++) {
-            const pile = tempTableau[tIndex];
+    // Deal every card from the deck into one of the 7 piles, ensuring it's a valid reverse move.
+    while (deck.length > 0) {
+        const card = deck.pop()!;
+        card.faceUp = true;
+        const validPiles: number[] = [];
+        
+        for (let i = 0; i < 7; i++) {
+            const pile = playableTableau[i];
             if (pile.length === 0) {
-                if (cardToMove.rank === Rank.KING) validTableauSpots.push(tIndex);
+                 if (card.rank === Rank.KING) {
+                    validPiles.push(i);
+                 }
             } else {
-                const topCard = pile[pile.length - 1];
-                if (SUIT_COLOR_MAP[cardToMove.suit] !== SUIT_COLOR_MAP[topCard.suit] && RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topCard.rank] - 1) {
-                    validTableauSpots.push(tIndex);
+                const topCard = pile[0]; // We are building from the bottom-up (prepending)
+                if (SUIT_COLOR_MAP[card.suit] !== SUIT_COLOR_MAP[topCard.suit] && RANK_VALUE_MAP[topCard.rank] === RANK_VALUE_MAP[card.rank] + 1) {
+                    validPiles.push(i);
                 }
             }
         }
-
-        if (validTableauSpots.length > 0) {
-            const destIndex = validTableauSpots[Math.floor(Math.random() * validTableauSpots.length)];
-            tempTableau[destIndex].push(tempFoundations[fIndex].pop()!);
+        
+        if (validPiles.length > 0) {
+            // Place on a valid pile
+            const pileIdx = validPiles[Math.floor(Math.random() * validPiles.length)];
+            playableTableau[pileIdx].unshift(card);
+        } else {
+            // If no valid move is possible (e.g., all piles start with Aces), place it on the shortest pile
+            // to keep the distribution somewhat even.
+            let shortestPileIdx = 0;
+            for (let i = 1; i < 7; i++) {
+                if (playableTableau[i].length < playableTableau[shortestPileIdx].length) {
+                    shortestPileIdx = i;
+                }
+            }
+            playableTableau[shortestPileIdx].unshift(card);
         }
     }
 
-    // 3. Collect all cards from this solvable state into a single deck
-    const allCards: CardType[] = [...tempTableau.flat(), ...tempFoundations.flat()];
+    // 3. Now we have a fully solvable set of cards. Distribute them into the game structure.
+    const allCards = playableTableau.flat();
     
-    // Shuffle them to obscure the obvious solution path
-    for (let i = allCards.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [allCards[i], allCards[j]] = [allCards[j], allCards[i]];
+    // The first 24 cards become the stock. Their order is random but the composition is solvable.
+    const stock = allCards.splice(0, 24);
+    
+    // The remaining 28 cards are dealt into the tableau pyramid structure.
+    const tableauCards = allCards;
+    const finalTableau: CardType[][] = Array.from({ length: 7 }, () => []);
+
+    for (let i = 0; i < 7; i++) {
+        for (let j = i; j < 7; j++) {
+            const card = tableauCards.pop();
+            if (card) {
+                finalTableau[j].push(card);
+            }
+        }
     }
 
-    // 4. Deal these "winnable" cards into a standard Klondike starting layout
-    const deckForState = [...allCards];
-    const finalTableau: CardType[][] = Array.from({ length: 7 }, (_, i) => deckForState.splice(0, i + 1));
+    // 4. Set the face-up/face-down status of all cards correctly.
     finalTableau.forEach(pile => {
-        pile.forEach((card, index) => card.faceUp = (index === pile.length - 1));
+        pile.forEach((card, idx) => {
+            card.faceUp = (idx === pile.length - 1);
+        });
+    });
+    stock.forEach(card => {
+        card.faceUp = false;
     });
 
-    const finalStock = deckForState.map(c => ({ ...c, faceUp: false }));
-
-    return { tableau: finalTableau, stock: finalStock };
+    return { tableau: finalTableau, stock };
 };
 
 
