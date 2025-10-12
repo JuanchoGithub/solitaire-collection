@@ -1,10 +1,12 @@
 
+
 import React from 'react';
 import type { KlondikeController } from '../games/klondike/useKlondike';
 import EmptyPile from './EmptyPile';
 import WinModal from './WinModal';
 import RulesModal from './RulesModal';
 import PauseModal from './PauseModal';
+import GameLogModal from './GameLogModal';
 import GameHeader from './GameHeader';
 import GameFooter from './GameFooter';
 import { Suit, Rank } from '../types';
@@ -23,7 +25,9 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
     const {
         Board, Card, stock, waste, foundations, tableau, history, isWon, isRulesModalOpen, shakeCardId, pressedStack, hint, moves, time, isPaused, turnMode, autoplayMode,
         cardSize, shuffleClass, isDealing, dealAnimationCards, animationData, returnAnimationData, stockAnimationData, dragGhost, dragSourceInfo, hiddenCardIds, foundationFx,
+        gameLog, isLogModalOpen,
         initializeGame, handleUndo, handleTurnModeToggle, handleAutoplayModeToggle, handleStockClick, handleHint, setIsRulesModalOpen, setIsPaused, handleMouseDown, handleAnimationEnd, handleReturnAnimationEnd,
+        setIsLogModalOpen,
         mainContainerRef, stockRef, wasteRef, foundationRefs, tableauRefs, initialDeckRef, formatTime
     } = controller;
     
@@ -32,6 +36,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
             {isWon && <WinModal onPlayAgain={initializeGame} />}
             {isRulesModalOpen && <RulesModal game="klondike" onClose={() => setIsRulesModalOpen(false)} />}
             {isPaused && <PauseModal onResume={() => setIsPaused(false)} />}
+            {isLogModalOpen && <GameLogModal log={gameLog} onClose={() => setIsLogModalOpen(false)} />}
         </>
     );
 
@@ -467,6 +472,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                 onHint={handleHint}
                 onRules={() => setIsRulesModalOpen(true)}
                 onSettings={onSettingsClick}
+                onLog={() => setIsLogModalOpen(true)}
                 isUndoDisabled={history.length === 0}
                 isHintDisabled={isDealing || isPaused || !!stockAnimationData || !!animationData}
                 isDealing={isDealing}
