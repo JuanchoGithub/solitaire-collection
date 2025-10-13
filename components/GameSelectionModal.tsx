@@ -32,7 +32,7 @@ const GameSelectionModal: React.FC<GameSelectionModalProps> = ({ onClose, onSele
   if (!position) return null;
 
   return (
-    <div className="absolute inset-0 z-50" onClick={onClose}>
+    <div className="absolute inset-0 z-[250]" onClick={onClose}>
       <div 
         style={{ top: `${position.top}px`, left: `${position.left}px` }}
         className="absolute bg-white rounded-xl shadow-2xl p-2 w-72 text-gray-800 animate-fade-in-down origin-top-left"

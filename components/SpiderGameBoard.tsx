@@ -1,6 +1,3 @@
-
-
-
 import React from 'react';
 import type { SpiderController } from '../games/spider/useSpider';
 import EmptyPile from './EmptyPile';
@@ -221,7 +218,7 @@ const SpiderGameBoard: React.FC<SpiderGameBoardProps> = ({ controller, onTitleCl
             <div className="w-full flex-1 overflow-y-auto min-h-0">
                 <main ref={mainContainerRef} className="max-w-7xl mx-auto w-full pt-4 pb-4">
                      <div style={{ width: `${tableauWidth}px` }} className="mx-auto">
-                        <div className={`flex justify-between items-start gap-4 mb-4 transition-opacity duration-300 ${isDealing ? 'opacity-0' : 'opacity-100'}`}>
+                        <div className={`flex justify-between items-start gap-4 mb-4`}>
                             <div ref={stockRef} onClick={handleStockClick} className={`relative cursor-pointer ${shakeStock ? 'card-shake' : ''} ${hint?.type === 'stock' ? 'stock-hint' : ''}`}>
                                 {stock.length > 0 ? (
                                     <>

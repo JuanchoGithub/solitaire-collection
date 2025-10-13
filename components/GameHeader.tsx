@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface GameHeaderProps {
@@ -18,7 +17,7 @@ const GameHeader: React.FC<GameHeaderProps> = ({
     title, time, moves, isDealing, onTitleClick, onPauseClick, formatTime, children, gameMenuButtonRef, layout
 }) => {
     return (
-        <header className={`flex flex-wrap justify-between items-center gap-4 py-2 transition-opacity duration-300 ${isDealing ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+        <header className={`flex flex-wrap justify-between items-center gap-4 py-2 relative z-[210]`}>
             <button
                 ref={gameMenuButtonRef}
                 onClick={onTitleClick}
@@ -34,7 +33,7 @@ const GameHeader: React.FC<GameHeaderProps> = ({
             {children}
 
             <div className="flex items-center gap-x-3 sm:gap-x-4 text-base sm:text-lg font-semibold">
-                 <button onClick={onPauseClick} className="text-yellow-400 hover:text-yellow-300" aria-label="Pause game">
+                 <button onClick={onPauseClick} disabled={isDealing} className="text-yellow-400 hover:text-yellow-300 disabled:text-gray-500/80 disabled:cursor-not-allowed" aria-label="Pause game">
                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 sm:h-7 sm:w-7" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 6a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1zm6 0a1 1 0 00-1 1v6a1 1 0 102 0V7a1 1 0 00-1-1z" clipRule="evenodd" />
                    </svg>

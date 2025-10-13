@@ -89,7 +89,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                         left: `${fromRect.left}px`,
                         '--translateX': `${translateX}px`,
                         '--translateY': `${translateY}px`,
-                        '--delay': `${i * 75}ms`,
+                        '--delay': `${i * 50}ms`,
                          width: cardSize.width, height: cardSize.height,
                     } as React.CSSProperties}>
                         <div className="card-flipper">
@@ -123,7 +123,7 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                         left: `${fromRect.left + offset}px`,
                         '--translateX': `${translateX}px`,
                         '--translateY': `${translateY}px`,
-                        '--delay': `${(numWasteCards - 1 - i) * 20}ms`,
+                        '--delay': `${(numWasteCards - 1 - i) * 15}ms`,
                          width: cardSize.width, height: cardSize.height,
                     } as React.CSSProperties}>
                         <div className="card-flipper">
@@ -633,11 +633,11 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                 }
                 .stock-turn-card {
                     position: fixed;
-                    animation: stock-turn-move 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+                    animation: stock-turn-move 0.25s cubic-bezier(0.25, 1, 0.5, 1) forwards;
                     animation-delay: var(--delay);
                 }
                 .stock-turn-card .card-flipper {
-                    animation: stock-turn-flip 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+                    animation: stock-turn-flip 0.25s cubic-bezier(0.25, 1, 0.5, 1) forwards;
                     animation-delay: var(--delay);
                 }
                 
@@ -657,11 +657,11 @@ const GameBoard: React.FC<GameBoardProps> = ({ controller, onTitleClick, onSetti
                 }
                 .waste-reset-card {
                     position: fixed;
-                    animation: waste-reset-move 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+                    animation: waste-reset-move 0.25s cubic-bezier(0.25, 1, 0.5, 1) forwards;
                     animation-delay: var(--delay);
                 }
                 .waste-reset-card .card-flipper {
-                    animation: waste-reset-flip 0.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+                    animation: waste-reset-flip 0.25s cubic-bezier(0.25, 1, 0.5, 1) forwards;
                     animation-delay: var(--delay);
                 }
 

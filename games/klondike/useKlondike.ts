@@ -710,7 +710,7 @@ export const useKlondike = ({ theme, layout, gameMode }: UseKlondikeProps) => {
             setTimeout(() => {
                 setStockAnimationData(null);
                 setHiddenCardIds([]);
-            }, 500 + (drawnCards.length - 1) * 75);
+            }, 250 + (drawnCards.length - 1) * 50);
         } else {
             advanceSolutionIfCorrect('reset_stock');
             addToLog('Reset Waste pile to Stock.');
@@ -722,7 +722,7 @@ export const useKlondike = ({ theme, layout, gameMode }: UseKlondikeProps) => {
                 const newStock = cardsToReset.map(c => ({ ...c, faceUp: false }));
                 setStock(newStock);
                 setStockAnimationData(null);
-            }, 500 + (cardsToReset.length - 1) * 20);
+            }, 250 + (cardsToReset.length - 1) * 15);
         }
     };
 
