@@ -12,11 +12,13 @@ import { createThemeFromJson } from './themes/json/loader';
 import type { SpiderSuitCount } from './games/spider/types';
 
 type KlondikeMode = 'random' | 'winnable';
+type FreecellMode = 'random' | 'solvable';
 
 const App: React.FC = () => {
     const [currentGame, setCurrentGame] = useState<'spider' | 'klondike' | 'freecell'>('spider');
     const [spiderSuitCount, setSpiderSuitCount] = useState<SpiderSuitCount>(1);
     const [klondikeMode, setKlondikeMode] = useState<KlondikeMode>('random');
+    const [freecellMode, setFreecellMode] = useState<FreecellMode>('solvable');
     const [isGameMenuOpen, setIsGameMenuOpen] = useState(false);
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [isThemeCreatorOpen, setIsThemeCreatorOpen] = useState(false);
@@ -50,9 +52,10 @@ const App: React.FC = () => {
         }
     }, []);
 
-    const handleSelectGame = useCallback((selection: { game: 'klondike', mode: KlondikeMode } | 'freecell' | { game: 'spider', suits: SpiderSuitCount }) => {
-        if (selection === 'freecell') {
-            if (currentGame !== 'freecell') {
+    const handleSelectGame = useCallback((selection: { game: 'klondike', mode: KlondikeMode } | { game: 'freecell', mode: FreecellMode } | { game: 'spider', suits: SpiderSuitCount }) => {
+        if (selection.game === 'freecell') {
+            if (currentGame !== 'freecell' || freecellMode !== selection.mode) {
+                setFreecellMode(selection.mode);
                 setCurrentGame('freecell');
             }
         } else if (selection.game === 'klondike') {
@@ -67,7 +70,7 @@ const App: React.FC = () => {
             }
         }
         setIsGameMenuOpen(false);
-    }, [currentGame, spiderSuitCount, klondikeMode]);
+    }, [currentGame, spiderSuitCount, klondikeMode, freecellMode]);
 
     const handleOpenGameMenu = useCallback(() => setIsGameMenuOpen(true), []);
     const handleCloseGameMenu = useCallback(() => setIsGameMenuOpen(false), []);
@@ -114,7 +117,7 @@ const App: React.FC = () => {
             gameElement = <Klondike key={`klondike-${klondikeMode}`} {...commonProps} gameMode={klondikeMode} />;
             break;
         case 'freecell':
-            gameElement = <Freecell key="freecell" {...commonProps} />;
+            gameElement = <Freecell key={`freecell-${freecellMode}`} {...commonProps} gameMode={freecellMode} />;
             break;
         default:
             gameElement = <Spider key={`spider-${spiderSuitCount}`} {...commonProps} suitCount={spiderSuitCount} />;
@@ -131,6 +134,7 @@ const App: React.FC = () => {
                     activeGame={currentGame}
                     activeSpiderSuitCount={spiderSuitCount}
                     activeKlondikeMode={klondikeMode}
+                    activeFreecellMode={freecellMode}
                     buttonRef={gameMenuButtonRef}
                 />
             )}

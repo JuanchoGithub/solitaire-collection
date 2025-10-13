@@ -5,6 +5,7 @@ import { Suit, Rank } from '../../types';
 import type { GameState } from './types';
 import { SUITS, RANKS, RANK_VALUE_MAP, CARD_ASPECT_RATIO, SUIT_COLOR_MAP, SUIT_SYMBOL_MAP } from '../../constants';
 import { useCardDrag } from '../../hooks/useCardDrag';
+import { generateSolvableDeal } from './utils';
 
 type AnimationState = {
     cards: CardType[];
@@ -23,9 +24,10 @@ type DropTarget = 'tableau' | 'foundation' | 'freecell';
 
 interface UseFreecellProps {
     theme: Theme;
+    gameMode: 'random' | 'solvable';
 }
 
-export const useFreecell = ({ theme }: UseFreecellProps) => {
+export const useFreecell = ({ theme, gameMode }: UseFreecellProps) => {
     const { Board, Card } = theme;
 
     // Core Game State
@@ -33,6 +35,7 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
     const [foundations, setFoundations] = useState<CardType[][]>([[], [], [], []]);
     const [tableau, setTableau] = useState<CardType[][]>(Array.from({ length: 8 }, () => []));
     const [history, setHistory] = useState<GameState[]>([]);
+    const [seed, setSeed] = useState<number | null>(null);
 
     // UI & Interaction State
     const [isWon, setIsWon] = useState(false);
@@ -258,6 +261,7 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
         setDealAnimationCards([]);
         setShuffleClass('');
         setIsDealing(true);
+        setSeed(null);
     }, []);
 
     useEffect(() => {
@@ -266,21 +270,31 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
 
     useEffect(() => {
         if (isDealing && mainContainerRef.current && tableauRefs.current.every(ref => ref) && initialDeckRef.current) {
-            let cardId = 0;
-            const fullDeck = SUITS.flatMap(suit => RANKS.map(rank => ({ id: cardId++, suit, rank, faceUp: true })));
-            for (let i = fullDeck.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [fullDeck[i], fullDeck[j]] = [fullDeck[j], fullDeck[i]];
+            let finalTableau: CardType[][];
+            
+            if (gameMode === 'solvable') {
+                const deal = generateSolvableDeal();
+                finalTableau = deal.tableau;
+                setSeed(deal.seed);
+            } else { // random
+                let cardId = 0;
+                const fullDeck = SUITS.flatMap(suit => RANKS.map(rank => ({ id: cardId++, suit, rank, faceUp: true })));
+                for (let i = fullDeck.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [fullDeck[i], fullDeck[j]] = [fullDeck[j], fullDeck[i]];
+                }
+                const deckForState = [...fullDeck];
+                finalTableau = Array.from({ length: 8 }, () => []);
+                deckForState.forEach((card, i) => finalTableau[i % 8].push(card));
             }
-            const deckForState = [...fullDeck];
+            
             setShuffleClass('perform-shuffle');
             const dealStartTime = 800;
             const flyingCards: typeof dealAnimationCards = [];
             let dealDelay = 0;
             const dealStagger = 15;
             const fromRect = initialDeckRef.current.getBoundingClientRect();
-            const finalTableau: CardType[][] = Array.from({ length: 8 }, () => []);
-            deckForState.forEach((card, i) => finalTableau[i % 8].push(card));
+            
             finalTableau.forEach((pile, pileIndex) => {
                 pile.forEach((card, cardIndex) => {
                     const toEl = tableauRefs.current[pileIndex];
@@ -307,7 +321,7 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
                 setTime(0);
             }, dealStartTime + dealDelay + 400);
         }
-    }, [isDealing, cardSize.width, cardSize.faceUpStackOffset]);
+    }, [isDealing, cardSize.width, cardSize.faceUpStackOffset, gameMode]);
 
     useEffect(() => {
         if (foundations.flat().length === 52) setIsWon(true);
@@ -545,7 +559,7 @@ export const useFreecell = ({ theme }: UseFreecellProps) => {
 
     return {
         freecells, foundations, tableau, history, isWon, isRulesModalOpen, pressedStack, hint, moves, time, isPaused, autoplayMode,
-        cardSize, shuffleClass, isDealing,
+        cardSize, shuffleClass, isDealing, seed,
         dealAnimationCards, animationData, returnAnimationData, dragGhost, dragSourceInfo, hiddenCardIds, foundationFx,
         initializeGame, handleUndo, handleHint, setIsRulesModalOpen, setIsPaused, handleMouseDown, handleReturnAnimationEnd, handleAnimationEnd, handleAutoplayModeToggle,
         mainContainerRef, foundationRefs, tableauRefs, freecellRefs, initialDeckRef,

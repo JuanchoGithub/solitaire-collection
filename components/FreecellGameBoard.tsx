@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import type { FreecellController } from '../games/freecell/useFreecell';
 import EmptyPile from './EmptyPile';
@@ -22,7 +23,7 @@ interface FreecellGameBoardProps {
 const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTitleClick, onSettingsClick, gameMenuButtonRef, layout }) => {
     const {
         Board, Card, freecells, foundations, tableau, history, isWon, isRulesModalOpen, pressedStack, hint, moves, time, isPaused, autoplayMode,
-        cardSize, shuffleClass, isDealing, dealAnimationCards, animationData, returnAnimationData, dragGhost, dragSourceInfo, hiddenCardIds, foundationFx,
+        cardSize, shuffleClass, isDealing, dealAnimationCards, animationData, returnAnimationData, dragGhost, dragSourceInfo, hiddenCardIds, foundationFx, seed,
         initializeGame, handleUndo, handleHint, setIsRulesModalOpen, setIsPaused, handleMouseDown, handleReturnAnimationEnd, handleAnimationEnd, handleAutoplayModeToggle,
         mainContainerRef, foundationRefs, tableauRefs, freecellRefs, initialDeckRef, formatTime
     } = controller;
@@ -147,7 +148,13 @@ const FreecellGameBoard: React.FC<FreecellGameBoardProps> = ({ controller, onTit
                     gameMenuButtonRef={gameMenuButtonRef}
                     layout={layout}
                 >
-                    <div className="flex-grow"></div>
+                    <div className="flex-grow flex justify-center">
+                        {seed && (
+                            <div className="text-sm text-white/70 font-mono hidden sm:block">
+                                Deal #{seed}
+                            </div>
+                        )}
+                    </div>
                 </GameHeader>
             </div>
             

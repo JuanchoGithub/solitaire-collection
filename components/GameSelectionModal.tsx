@@ -3,17 +3,19 @@ import React, { useState, useEffect } from 'react';
 import type { SpiderSuitCount } from '../games/spider/types';
 
 type KlondikeMode = 'random' | 'winnable';
+type FreecellMode = 'random' | 'solvable';
 
 interface GameSelectionModalProps {
   onClose: () => void;
-  onSelectGame: (selection: { game: 'klondike', mode: KlondikeMode } | 'freecell' | { game: 'spider', suits: SpiderSuitCount }) => void;
+  onSelectGame: (selection: { game: 'klondike', mode: KlondikeMode } | { game: 'freecell', mode: FreecellMode } | { game: 'spider', suits: SpiderSuitCount }) => void;
   activeGame: 'spider' | 'klondike' | 'freecell';
   activeSpiderSuitCount: SpiderSuitCount;
   activeKlondikeMode: KlondikeMode;
+  activeFreecellMode: FreecellMode;
   buttonRef: React.RefObject<HTMLButtonElement>;
 }
 
-const GameSelectionModal: React.FC<GameSelectionModalProps> = ({ onClose, onSelectGame, activeGame, activeSpiderSuitCount, activeKlondikeMode, buttonRef }) => {
+const GameSelectionModal: React.FC<GameSelectionModalProps> = ({ onClose, onSelectGame, activeGame, activeSpiderSuitCount, activeKlondikeMode, activeFreecellMode, buttonRef }) => {
   const [position, setPosition] = useState<{ top: number, left: number } | null>(null);
 
   useEffect(() => {
@@ -70,11 +72,18 @@ const GameSelectionModal: React.FC<GameSelectionModalProps> = ({ onClose, onSele
             >
                 Klondike (Winnable)
             </button>
+            <div className="border-t border-gray-200 my-2"></div>
             <button
-                onClick={() => onSelectGame('freecell')}
-                className={`${buttonBaseClasses} ${activeGame === 'freecell' ? activeButtonClasses : inactiveButtonClasses}`}
+                onClick={() => onSelectGame({ game: 'freecell', mode: 'solvable' })}
+                className={`${buttonBaseClasses} ${activeGame === 'freecell' && activeFreecellMode === 'solvable' ? activeButtonClasses : inactiveButtonClasses}`}
             >
-                Freecell
+                Freecell (Solvable)
+            </button>
+            <button
+                onClick={() => onSelectGame({ game: 'freecell', mode: 'random' })}
+                className={`${buttonBaseClasses} ${activeGame === 'freecell' && activeFreecellMode === 'random' ? activeButtonClasses : inactiveButtonClasses}`}
+            >
+                Freecell (Random)
             </button>
         </div>
       </div>
