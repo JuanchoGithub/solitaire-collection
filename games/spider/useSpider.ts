@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { CardType, Theme } from '../../types';
 import { Suit, Rank } from '../../types';
@@ -355,17 +356,12 @@ export const useSpider = ({ theme, suitCount }: UseSpiderProps) => {
     };
 
     const findAllHints = useCallback((): HintState[] => {
-        const hints: { hint: HintState; priority: number }[] = [];
-        const hintedCardIds = new Set<number>();
+        // Map<cardId, { safe: number[], breaking: number[] }>
+        // For each movable stack (identified by its top card's ID), we store the priorities of all its possible moves,
+        // separated into moves that are "safe" (don't break a sequence) and those that are "breaking".
+        const moveOptions = new Map<number, { safe: number[], breaking: number[] }>();
 
-        const addHint = (cardId: number, priority: number) => {
-            if (!hintedCardIds.has(cardId)) {
-                hints.push({ hint: { type: 'card', cardId }, priority });
-                hintedCardIds.add(cardId);
-            }
-        };
-
-        // Find all possible moves
+        // 1. Find and categorize all possible moves.
         for (let sourcePileIndex = 0; sourcePileIndex < tableau.length; sourcePileIndex++) {
             const sourcePile = tableau[sourcePileIndex];
             if (sourcePile.length === 0) continue;
@@ -381,7 +377,7 @@ export const useSpider = ({ theme, suitCount }: UseSpiderProps) => {
                         break;
                     }
                 }
-                if (!isDraggableStack) continue; // Only suggest moving valid stacks
+                if (!isDraggableStack) continue;
 
                 const cardToMove = stackToMove[0];
                 for (let destPileIndex = 0; destPileIndex < tableau.length; destPileIndex++) {
@@ -390,7 +386,8 @@ export const useSpider = ({ theme, suitCount }: UseSpiderProps) => {
                     const topDestCard = destPile[destPile.length - 1];
 
                     if (!topDestCard || RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1) {
-                        const uncoversCard = cardIndex > 0 && !sourcePile[cardIndex - 1].faceUp;
+                        // This is a valid drop target. Now, evaluate the move.
+                        const uncoversCard = cardIndex > 0 && sourcePile.length > stackToMove.length && !sourcePile[cardIndex - 1].faceUp;
                         const createsEmptyPile = sourcePile.length === stackToMove.length;
                         
                         let isBreakingSequence = false;
@@ -403,40 +400,51 @@ export const useSpider = ({ theme, suitCount }: UseSpiderProps) => {
 
                         const increasesSequence = topDestCard && topDestCard.suit === cardToMove.suit;
 
-                        let priority = 4; // Default
+                        let priority = 4; // Default move
+                        if (increasesSequence) priority = 2;
+                        if (createsEmptyPile) priority = 1;
                         if (uncoversCard) priority = 0;
-                        else if (createsEmptyPile) priority = 1;
-                        else if (increasesSequence && !isBreakingSequence) priority = 2;
-                        else if (increasesSequence && isBreakingSequence) priority = 3;
-                        else if (isBreakingSequence) priority = 5; // De-prioritize breaking sequences
 
-                        addHint(cardToMove.id, priority);
+                        const cardId = cardToMove.id;
+                        if (!moveOptions.has(cardId)) {
+                            moveOptions.set(cardId, { safe: [], breaking: [] });
+                        }
+                        const options = moveOptions.get(cardId)!;
+                        
+                        if (isBreakingSequence) {
+                            options.breaking.push(priority);
+                        } else {
+                            options.safe.push(priority);
+                        }
                     }
                 }
             }
         }
 
-        const sortedGoodHints = hints
-            .filter(h => h.priority < 5)
-            .sort((a, b) => a.priority - b.priority);
+        // 2. Consolidate move options into hints, prioritizing safe moves.
+        const safeHints: { hint: HintState; priority: number }[] = [];
+        const breakingHints: { hint: HintState; priority: number }[] = [];
 
-        let finalHints: HintState[] = sortedGoodHints
-            .map(item => item.hint!)
-            .filter((hint, index, self) => 
-                index === self.findIndex(t => t.type === 'card' && hint.type === 'card' && t.cardId === hint.cardId)
-            );
-        
-        if (finalHints.length === 0 && hints.length > 0) {
-            const lastResortHints = hints
-                .sort((a, b) => a.priority - b.priority)
-                .map(item => item.hint!)
-                .filter((hint, index, self) => 
-                    index === self.findIndex(t => t.type === 'card' && hint.type === 'card' && t.cardId === hint.cardId)
-                );
-            if (lastResortHints.length > 0) finalHints = [lastResortHints[0]];
+        for (const [cardId, options] of moveOptions.entries()) {
+            const bestSafePriority = Math.min(...(options.safe.length > 0 ? options.safe : [Infinity]));
+            if (bestSafePriority !== Infinity) {
+                safeHints.push({ hint: { type: 'card', cardId }, priority: bestSafePriority });
+            } else {
+                const bestBreakingPriority = Math.min(...(options.breaking.length > 0 ? options.breaking : [Infinity]));
+                if (bestBreakingPriority !== Infinity) {
+                    breakingHints.push({ hint: { type: 'card', cardId }, priority: bestBreakingPriority });
+                }
+            }
         }
 
-        if (finalHints.length > 0) return finalHints;
+        // 3. Return hints based on the hierarchy: safe moves, then breaking moves, then stock.
+        if (safeHints.length > 0) {
+            return safeHints.sort((a, b) => a.priority - b.priority).map(item => item.hint!);
+        }
+        
+        if (breakingHints.length > 0) {
+            return breakingHints.sort((a, b) => a.priority - b.priority).map(item => item.hint!);
+        }
         
         if (stock.length > 0 && !tableau.some(p => p.length === 0)) {
             return [{ type: 'stock' }];

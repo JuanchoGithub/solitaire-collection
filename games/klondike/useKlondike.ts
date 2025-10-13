@@ -1,7 +1,4 @@
 
-
-
-
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { CardType, Theme } from '../../types';
 import { Suit, Rank } from '../../types';
@@ -730,130 +727,128 @@ export const useKlondike = ({ theme, layout, gameMode }: UseKlondikeProps) => {
     };
 
     const findAllHints = useCallback((): HintState[] => {
-        const getHintsForPriority = (priority: number): HintState[] => {
-            const hints: HintState[] = [];
-            const hintedCardIds = new Set<number>();
-            const addHint = (cardId: number) => {
-                if (!hintedCardIds.has(cardId)) {
-                    hints.push({ type: 'card', cardId });
-                    hintedCardIds.add(cardId);
-                }
-            };
-            if (priority === 1) { // Move to foundation
-                const topWasteCard = waste[0];
-                if (topWasteCard) {
-                    const foundationIndex = SUITS.indexOf(topWasteCard.suit);
-                    const targetPile = foundations[foundationIndex];
-                    const topCard = targetPile[targetPile.length - 1];
-                    if ((!topCard && topWasteCard.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[topWasteCard.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
-                        addHint(topWasteCard.id);
-                    }
-                }
-                for (const pile of tableau) {
-                    const topTableauCard = pile[pile.length - 1];
-                    if (topTableauCard?.faceUp) {
-                        const foundationIndex = SUITS.indexOf(topTableauCard.suit);
-                        const targetPile = foundations[foundationIndex];
-                        const topCard = targetPile[targetPile.length - 1];
-                        if ((!topCard && topTableauCard.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[topTableauCard.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
-                            addHint(topTableauCard.id);
-                        }
-                    }
-                }
-                return hints;
+        const hintedCardIds = new Set<number>();
+        const addHint = (hints: HintState[], cardId: number) => {
+            if (!hintedCardIds.has(cardId)) {
+                hints.push({ type: 'card', cardId });
+                hintedCardIds.add(cardId);
             }
-            if (priority === 2) { // Uncover a face-down card
-                for (const sourcePile of tableau) {
-                    const firstFaceUpIndex = sourcePile.findIndex(c => c.faceUp);
-                    if (firstFaceUpIndex > 0) { // This means there's a card to uncover
-                        for (let i = firstFaceUpIndex; i < sourcePile.length; i++) {
-                            const stackToMove = sourcePile.slice(i);
-                            const cardToMove = stackToMove[0];
-
-                            // Validate the stack being moved
-                            let isStackValid = true;
-                            for (let k = 0; k < stackToMove.length - 1; k++) {
-                                if (SUIT_COLOR_MAP[stackToMove[k].suit] === SUIT_COLOR_MAP[stackToMove[k + 1].suit] || RANK_VALUE_MAP[stackToMove[k].rank] !== RANK_VALUE_MAP[stackToMove[k + 1].rank] + 1) {
-                                    isStackValid = false;
-                                    break;
-                                }
-                            }
-                            if (!isStackValid) continue;
-
-                            for (const destPile of tableau) {
-                                if (sourcePile === destPile) continue;
-                                const topDestCard = destPile[destPile.length - 1];
-                                if ((!topDestCard && cardToMove.rank === Rank.KING) || (topDestCard?.faceUp && SUIT_COLOR_MAP[cardToMove.suit] !== SUIT_COLOR_MAP[topDestCard.suit] && RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1)) {
-                                    addHint(cardToMove.id);
-                                }
-                            }
-                        }
-                    }
-                }
-                return hints;
-            }
-            if (priority === 3) { // Move from waste to tableau
-                const topWasteCard = waste[0];
-                if (topWasteCard) {
-                     for (const pile of tableau) {
-                        const topCard = pile[pile.length - 1];
-                        if ((!topCard && topWasteCard.rank === Rank.KING) || (topCard?.faceUp && SUIT_COLOR_MAP[topWasteCard.suit] !== SUIT_COLOR_MAP[topCard.suit] && RANK_VALUE_MAP[topWasteCard.rank] === RANK_VALUE_MAP[topCard.rank] - 1)) {
-                             addHint(topWasteCard.id);
-                        }
-                    }
-                }
-                return hints;
-            }
-            if (priority === 4) { // Any other tableau move, but with improved logic
-                for (const sourcePile of tableau) {
-                   const firstFaceUpIndex = sourcePile.findIndex(c => c.faceUp);
-                    // This priority runs if no better moves exist. We only check piles that are fully face-up.
-                    if (firstFaceUpIndex === 0) {
-                        for (let i = 0; i < sourcePile.length; i++) {
-                            const stackToMove = sourcePile.slice(i);
-                            const cardToMove = stackToMove[0];
-
-                            let isStackValid = true;
-                            for (let k = 0; k < stackToMove.length - 1; k++) {
-                                if (SUIT_COLOR_MAP[stackToMove[k].suit] === SUIT_COLOR_MAP[stackToMove[k + 1].suit] || RANK_VALUE_MAP[stackToMove[k].rank] !== RANK_VALUE_MAP[stackToMove[k + 1].rank] + 1) {
-                                    isStackValid = false;
-                                    break;
-                                }
-                            }
-                            if (!isStackValid) continue;
-                            
-                           for (const destPile of tableau) {
-                               if (sourcePile === destPile) continue;
-                               const topDestCard = destPile[destPile.length - 1];
-                                if ((!topDestCard && cardToMove.rank === Rank.KING) || (topDestCard?.faceUp && SUIT_COLOR_MAP[cardToMove.suit] !== SUIT_COLOR_MAP[topDestCard.suit] && RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1)) {
-                                   const isMidStackMove = i > 0;
-                                   if (isMidStackMove) {
-                                       // Only suggest mid-stack moves if they enable a foundation play
-                                       const revealedCard = sourcePile[i - 1];
-                                       const foundationIndex = SUITS.indexOf(revealedCard.suit);
-                                       const targetPile = foundations[foundationIndex];
-                                       const topCard = targetPile[targetPile.length - 1];
-                                       if ((!topCard && revealedCard.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[revealedCard.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
-                                           addHint(cardToMove.id);
-                                       }
-                                   } else {
-                                       // It's not a mid-stack move, so it's a reasonable suggestion
-                                       addHint(cardToMove.id);
-                                   }
-                               }
-                           }
-                       }
-                   }
-               }
-               return hints;
-            }
-            return [];
         };
-        for (let priority = 1; priority <= 4; priority++) {
-            const hints = getHintsForPriority(priority);
-            if (hints.length > 0) return hints;
+
+        const canMoveToFoundation = (card: CardType): boolean => {
+            if (!card) return false;
+            const foundationIndex = SUITS.indexOf(card.suit);
+            if (foundationIndex === -1) return false;
+            const targetPile = foundations[foundationIndex];
+            const topCard = targetPile[targetPile.length - 1];
+            return ((!topCard && card.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[card.rank] === RANK_VALUE_MAP[topCard.rank] + 1));
+        };
+        
+        // Priority 1: Move to foundation
+        let p1Hints: HintState[] = [];
+        const topWasteCard = waste[0];
+        if (topWasteCard && canMoveToFoundation(topWasteCard)) addHint(p1Hints, topWasteCard.id);
+        for (const pile of tableau) {
+            if (pile.length > 0 && pile[pile.length - 1].faceUp && canMoveToFoundation(pile[pile.length - 1])) {
+                addHint(p1Hints, pile[pile.length - 1].id);
+            }
         }
+        if (p1Hints.length > 0) return p1Hints;
+
+        // Evaluate all possible tableau moves and categorize them
+        const uncoverMoves: HintState[] = [];
+        const createEmptySpaceMoves: HintState[] = [];
+        const strategicMidStackMoves: HintState[] = [];
+        const otherTableauMoves: HintState[] = [];
+
+        for (let sourcePileIndex = 0; sourcePileIndex < tableau.length; sourcePileIndex++) {
+            const sourcePile = tableau[sourcePileIndex];
+            if (sourcePile.length === 0) continue;
+            
+            const firstFaceUpIndex = sourcePile.findIndex(c => c.faceUp);
+            if (firstFaceUpIndex === -1) continue;
+
+            for (let i = firstFaceUpIndex; i < sourcePile.length; i++) {
+                const stackToMove = sourcePile.slice(i);
+                const cardToMove = stackToMove[0];
+
+                let isStackValid = true;
+                for (let k = 0; k < stackToMove.length - 1; k++) {
+                    if (SUIT_COLOR_MAP[stackToMove[k].suit] === SUIT_COLOR_MAP[stackToMove[k + 1].suit] || RANK_VALUE_MAP[stackToMove[k].rank] !== RANK_VALUE_MAP[stackToMove[k + 1].rank] + 1) {
+                        isStackValid = false;
+                        break;
+                    }
+                }
+                if (!isStackValid) continue;
+
+                for (let destPileIndex = 0; destPileIndex < tableau.length; destPileIndex++) {
+                    if (sourcePileIndex === destPileIndex) continue;
+                    const destPile = tableau[destPileIndex];
+                    const topDestCard = destPile[destPile.length - 1];
+
+                    if ((!topDestCard && cardToMove.rank === Rank.KING) || (topDestCard?.faceUp && SUIT_COLOR_MAP[cardToMove.suit] !== SUIT_COLOR_MAP[topDestCard.suit] && RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1)) {
+                        // This is a valid move, now categorize it
+                        if (i === firstFaceUpIndex && firstFaceUpIndex > 0) {
+                            addHint(uncoverMoves, cardToMove.id);
+                        } else if (i === 0 && sourcePile.length > 0) {
+                            addHint(createEmptySpaceMoves, cardToMove.id);
+                        } else if (i > 0) { // This is a mid-stack move
+                            if (canMoveToFoundation(sourcePile[i - 1])) {
+                                addHint(strategicMidStackMoves, cardToMove.id);
+                            } else {
+                                addHint(otherTableauMoves, cardToMove.id);
+                            }
+                        } else {
+                            addHint(otherTableauMoves, cardToMove.id);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Return hints based on priority
+        if (uncoverMoves.length > 0) return uncoverMoves;
+        if (createEmptySpaceMoves.length > 0) return createEmptySpaceMoves;
+
+        // Priority 4: Move from waste to tableau
+        let p4Hints: HintState[] = [];
+        if (topWasteCard) {
+            for (const pile of tableau) {
+                const topCard = pile[pile.length - 1];
+                if ((!topCard && topWasteCard.rank === Rank.KING) || (topCard?.faceUp && SUIT_COLOR_MAP[topWasteCard.suit] !== SUIT_COLOR_MAP[topCard.suit] && RANK_VALUE_MAP[topWasteCard.rank] === RANK_VALUE_MAP[topCard.rank] - 1)) {
+                     addHint(p4Hints, topWasteCard.id);
+                }
+            }
+        }
+        if (p4Hints.length > 0) return p4Hints;
+
+        // Priority 5: Strategic mid-stack moves
+        if (strategicMidStackMoves.length > 0) return strategicMidStackMoves;
+
+        // Priority 6: Other "safe" tableau moves (e.g., moving an entire face-up stack from one pile to another)
+        const safeOtherMoves = otherTableauMoves.filter(hint => {
+            if (hint.type !== 'card') return true;
+            const cardId = hint.cardId;
+            for (const sourcePile of tableau) {
+                const cardIndex = sourcePile.findIndex(c => c.id === cardId);
+                if (cardIndex !== -1) {
+                    // It's a "safe" move if it's the top of a stack (i=0) or the first face-up card.
+                    const firstFaceUpIndex = sourcePile.findIndex(c => c.faceUp);
+                    if (cardIndex === 0 || cardIndex === firstFaceUpIndex) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        });
+        if (safeOtherMoves.length > 0) return safeOtherMoves;
+
+        // Priority 7: Deal from Stock
         if (stock.length > 0 || waste.length > 0) return [{ type: 'stock' }];
+
+        // Priority 8: As an absolute last resort, suggest a non-strategic mid-stack move
+        if (otherTableauMoves.length > 0) return [otherTableauMoves[0]];
+
         return [];
     }, [stock, waste, tableau, foundations]);
 
