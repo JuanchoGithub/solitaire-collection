@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 
 interface RulesModalProps {
@@ -110,15 +111,17 @@ const SpiderRules: React.FC = () => (
 const KlondikeRules: React.FC = () => (
     <>
         <h2 className="text-3xl font-bold text-green-700 mb-2">How to Play Klondike Solitaire</h2>
-        <p className="text-sm text-gray-600 mb-4">This is the classic solitaire game most people are familiar with, often simply called "Patience." It rose to worldwide fame after being included with Microsoft Windows.</p>
+        <p className="text-sm text-gray-600 mb-4">
+            This is the classic solitaire game most people are familiar with, often simply called "Patience." It rose to worldwide fame after being included with Microsoft Windows. Klondike's appeal lies in its blend of luck and strategy, where the initial deal sets the foundation for solvability.
+        </p>
         
-        <div>
-            <h3 className="text-xl font-semibold mb-2 text-green-800">The Layout</h3>
+        <div className="mt-6">
+            <h3 className="text-xl font-semibold mb-2 text-green-800">The Layout & Deal</h3>
+            <p className="text-sm text-gray-700 mb-4">The game begins by shuffling a standard 52-card deck and dealing it into a specific layout:</p>
             <Diagram>
                 <div className="grid grid-rows-2 grid-cols-7 gap-2 h-full">
                     <Zone gridPosition="1 / 1 / 2 / 2" label="Stock"><CardStack count={24} /></Zone>
                     <Zone gridPosition="1 / 2 / 2 / 3" label="Waste"><MiniCard rank="5" isRed /></Zone>
-                    {/* FIX: Add empty children to Zone component */}
                     <Zone gridPosition="1 / 4 / 2 / 8" label="Foundations"><></></Zone>
                     <Zone gridPosition="2 / 1 / 3 / 8" label="Tableau">
                          <div className="flex justify-around items-start w-full px-2 pt-2">
@@ -127,25 +130,64 @@ const KlondikeRules: React.FC = () => (
                     </Zone>
                 </div>
             </Diagram>
+            <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700 my-4">
+                <li><strong>The Tableau:</strong> 28 cards are dealt into seven piles. The first pile has one card, the second has two, and so on, up to seven. The top card of each pile is face-up.</li>
+                <li><strong>The Stock:</strong> The remaining 24 cards are placed face-down to form the stock pile.</li>
+                <li><strong>The Waste:</strong> Cards from the stock are turned over into the waste pile.</li>
+                <li><strong>The Foundations:</strong> Four empty piles where you will build your suits from Ace to King.</li>
+            </ol>
+             <h4 className="text-lg font-semibold text-green-800 mt-4 mb-2">Tableau Pile Setup</h4>
+            <table className="w-full text-sm text-left text-gray-600 rounded-lg overflow-hidden">
+                <thead className="text-xs text-green-800 uppercase bg-green-100/50">
+                    <tr>
+                        <th scope="col" className="px-4 py-2">Pile</th>
+                        <th scope="col" className="px-4 py-2">Total Cards</th>
+                        <th scope="col" className="px-4 py-2">Face-Down</th>
+                        <th scope="col" className="px-4 py-2">Face-Up</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {Array.from({length: 7}).map((_, i) => (
+                         <tr key={i} className="bg-white border-b border-green-100/80">
+                            <td className="px-4 py-1 font-medium">{i + 1}</td>
+                            <td className="px-4 py-1">{i + 1}</td>
+                            <td className="px-4 py-1">{i}</td>
+                            <td className="px-4 py-1">1</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
         </div>
         
         <div className="mt-6">
             <h3 className="text-xl font-semibold mb-2 text-green-800">Gameplay Rules</h3>
+             <p className="text-sm text-gray-700 mb-4">
+                <strong>Building on the Tableau:</strong> You can move cards on top of other cards in the tableau in descending order (King to Ace) and alternating colors (red on black, black on red). You can move a single card or a valid sequence of cards. An empty tableau pile can only be filled with a King.
+            </p>
             <Diagram className="flex items-center justify-center gap-8">
                 <MiniCard rank="8" />
                 <MiniCard rank="7" isRed />
                 <Arrow from="50 50" to="105 50" />
             </Diagram>
-            <p className="text-sm text-gray-700"><strong>Tableau:</strong> Build sequences downward in alternating colors (e.g., a red 7 on a black 8).</p>
             
-            <Diagram className="flex items-center justify-center gap-8">
+             <p className="text-sm text-gray-700 mt-4 mb-4">
+                <strong>Building on Foundations:</strong> Foundations are built by suit, starting with the Ace and ending with the King (A, 2, 3... K). Once a card is on a foundation, it generally cannot be moved back.
+            </p>
+             <Diagram className="flex items-center justify-center gap-8">
                 <MiniCard rank="A" />
                 <MiniCard rank="2" />
                 <Arrow from="150 50" to="55 50" />
             </Diagram>
-            <p className="text-sm text-gray-700"><strong>Foundations:</strong> Build sequences upward by suit, starting with the Ace (A, 2, 3, etc.).</p>
+            <p className="text-sm text-gray-700 mt-4">
+                <strong>Using the Stock:</strong> Click the stock to deal cards to the waste pile (either 1 or 3 at a time, depending on game settings). The top card of the waste is available for play.
+            </p>
+        </div>
 
-             <p className="text-sm text-gray-700 mt-4"><strong>Objective:</strong> The goal is to move all 52 cards to the four foundation piles. The game is won when all foundations are built from Ace to King.</p>
+        <div className="mt-6">
+            <h3 className="text-xl font-semibold mb-2 text-green-800">Objective</h3>
+            <p className="text-sm text-gray-700">
+                The goal is to move all 52 cards onto the four foundation piles, with each pile containing a single suit in order from Ace to King. The game is won when all cards are in the foundations.
+            </p>
         </div>
     </>
 );

@@ -1,11 +1,14 @@
 
 
+
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { CardType, Theme } from '../../types';
 import { Suit, Rank } from '../../types';
 import type { GameState } from './types';
 import { SUITS, RANKS, RANK_VALUE_MAP, SUIT_COLOR_MAP, CARD_ASPECT_RATIO, SUIT_SYMBOL_MAP } from '../../constants';
 import { useCardDrag } from '../../hooks/useCardDrag';
+import { mulberry32, generateShuffledDeck } from './utils';
 
 type AnimationState = {
   cards: CardType[];
@@ -42,16 +45,6 @@ type SolutionStep = {
 } | {
     type: 'reset_stock';
 };
-
-// Seedable PRNG
-const mulberry32 = (a: number) => {
-    return () => {
-        let t = a += 0x6D2B79F5;
-        t = Math.imul(t ^ t >>> 15, t | 1);
-        t ^= t + Math.imul(t ^ t >>> 7, t | 61);
-        return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    }
-}
 
 const generateWinnableDealWithSolution = (seed: number): { tableau: CardType[][]; stock: CardType[]; solution: SolutionStep[] } => {
     const random = mulberry32(seed);
@@ -153,12 +146,7 @@ const generateWinnableDealWithSolution = (seed: number): { tableau: CardType[][]
     if (solvableDeck.length !== 52) {
         console.error("Winnable deal generation failed: incorrect card count. Dealing random game.");
         // Fallback to random deal if something went wrong
-        let cardId = 0;
-        const fullDeck = SUITS.flatMap(suit => RANKS.map(rank => ({ id: cardId++, suit, rank, faceUp: false })));
-        for (let i = fullDeck.length - 1; i > 0; i--) {
-            const j = Math.floor(random() * (i + 1));
-            [fullDeck[i], fullDeck[j]] = [fullDeck[j], fullDeck[i]];
-        }
+        const fullDeck = generateShuffledDeck(seed + 1);
         const finalTableau = Array.from({ length: 7 }, (_, i) => fullDeck.splice(0, i + 1));
         finalTableau.forEach(pile => pile.length > 0 && (pile[pile.length - 1].faceUp = true));
         return { tableau: finalTableau, stock: fullDeck, solution: [] };
@@ -315,7 +303,10 @@ export const useKlondike = ({ theme, layout, gameMode }: UseKlondikeProps) => {
     // Card Drag Engine
     const { dragSourceInfo, dragGhost, returnAnimationData, pressedStack, handleMouseDown, handleReturnAnimationEnd } = useCardDrag<DragSource, DropTarget>({
         isInteractionDisabled: isAnimating || isPaused || isDealing || !!stockAnimationData,
-        onDragStart: () => setHint(null),
+        onDragStart: () => {
+            setHint(null);
+            if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+        },
         getDraggableCards,
         findDropTarget: (x, y) => {
             for (let i = 0; i < foundationRefs.current.length; i++) {
@@ -414,6 +405,9 @@ export const useKlondike = ({ theme, layout, gameMode }: UseKlondikeProps) => {
             return moveMade;
         },
         onClick: (source, sourcePileIndex, sourceCardIndex, cards, element) => {
+            setHint(null);
+            if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+            
             const card = cards[0];
             if (source === 'foundation') return;
 
@@ -550,13 +544,7 @@ export const useKlondike = ({ theme, layout, gameMode }: UseKlondikeProps) => {
                 setSolution(finalSolution);
                 setSolutionStep(0);
             } else {
-                const random = mulberry32(seed);
-                let cardId = 0;
-                const fullDeck = SUITS.flatMap(suit => RANKS.map(rank => ({ id: cardId++, suit, rank, faceUp: false })));
-                for (let i = fullDeck.length - 1; i > 0; i--) {
-                    const j = Math.floor(random() * (i + 1));
-                    [fullDeck[i], fullDeck[j]] = [fullDeck[j], fullDeck[i]];
-                }
+                const fullDeck = generateShuffledDeck(seed);
                 const deckForState = [...fullDeck];
                 finalTableau = Array.from({ length: 7 }, (_, i) => deckForState.splice(0, i + 1));
                 finalStock = deckForState;
@@ -708,6 +696,7 @@ export const useKlondike = ({ theme, layout, gameMode }: UseKlondikeProps) => {
         if (isAnimating || isPaused || isDealing || stockAnimationData) return;
         if (stock.length === 0 && waste.length === 0) return;
         setHint(null);
+        if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
         setRecentlyMovedFromFoundation(null);
         saveStateToHistory();
         setMoves(prev => prev + 1);
@@ -815,15 +804,15 @@ export const useKlondike = ({ theme, layout, gameMode }: UseKlondikeProps) => {
                 }
                 return hints;
             }
-            if (priority === 4) { // Any other tableau move
+            if (priority === 4) { // Any other tableau move, but with improved logic
                 for (const sourcePile of tableau) {
                    const firstFaceUpIndex = sourcePile.findIndex(c => c.faceUp);
-                    if (firstFaceUpIndex !== -1) {
-                        for (let i = firstFaceUpIndex; i < sourcePile.length; i++) {
+                    // This priority runs if no better moves exist. We only check piles that are fully face-up.
+                    if (firstFaceUpIndex === 0) {
+                        for (let i = 0; i < sourcePile.length; i++) {
                             const stackToMove = sourcePile.slice(i);
                             const cardToMove = stackToMove[0];
 
-                            // Validate the stack being moved
                             let isStackValid = true;
                             for (let k = 0; k < stackToMove.length - 1; k++) {
                                 if (SUIT_COLOR_MAP[stackToMove[k].suit] === SUIT_COLOR_MAP[stackToMove[k + 1].suit] || RANK_VALUE_MAP[stackToMove[k].rank] !== RANK_VALUE_MAP[stackToMove[k + 1].rank] + 1) {
@@ -837,7 +826,20 @@ export const useKlondike = ({ theme, layout, gameMode }: UseKlondikeProps) => {
                                if (sourcePile === destPile) continue;
                                const topDestCard = destPile[destPile.length - 1];
                                 if ((!topDestCard && cardToMove.rank === Rank.KING) || (topDestCard?.faceUp && SUIT_COLOR_MAP[cardToMove.suit] !== SUIT_COLOR_MAP[topDestCard.suit] && RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1)) {
-                                   addHint(cardToMove.id);
+                                   const isMidStackMove = i > 0;
+                                   if (isMidStackMove) {
+                                       // Only suggest mid-stack moves if they enable a foundation play
+                                       const revealedCard = sourcePile[i - 1];
+                                       const foundationIndex = SUITS.indexOf(revealedCard.suit);
+                                       const targetPile = foundations[foundationIndex];
+                                       const topCard = targetPile[targetPile.length - 1];
+                                       if ((!topCard && revealedCard.rank === Rank.ACE) || (topCard && RANK_VALUE_MAP[revealedCard.rank] === RANK_VALUE_MAP[topCard.rank] + 1)) {
+                                           addHint(cardToMove.id);
+                                       }
+                                   } else {
+                                       // It's not a mid-stack move, so it's a reasonable suggestion
+                                       addHint(cardToMove.id);
+                                   }
                                }
                            }
                        }

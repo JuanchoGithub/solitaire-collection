@@ -84,7 +84,10 @@ export const useSpider = ({ theme, suitCount }: UseSpiderProps) => {
     // Card Drag Engine
     const { dragSourceInfo, dragGhost, returnAnimationData, pressedStack, handleMouseDown, handleReturnAnimationEnd } = useCardDrag<DragSource, DropTarget>({
         isInteractionDisabled: isAnimating || isPaused || isDealing,
-        onDragStart: () => setHint(null),
+        onDragStart: () => {
+            setHint(null);
+            if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+        },
         getDraggableCards: (source, sourcePileIndex, sourceCardIndex) => {
             const pile = tableau[sourcePileIndex];
             const card = pile[sourceCardIndex];
@@ -136,6 +139,9 @@ export const useSpider = ({ theme, suitCount }: UseSpiderProps) => {
             return false;
         },
         onClick: (source, sourcePileIndex, sourceCardIndex, cards, element) => {
+            setHint(null);
+            if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
+
             const sourcePile = tableau[sourcePileIndex];
             const cardToMove = cards[0];
             const potentialMoves: { destPileIndex: number; uncoversCard: boolean }[] = [];
@@ -321,6 +327,7 @@ export const useSpider = ({ theme, suitCount }: UseSpiderProps) => {
             return;
         }
         setHint(null);
+        if (hintTimeoutRef.current) clearTimeout(hintTimeoutRef.current);
         saveStateToHistory();
         setMoves(prev => prev + 1);
         const cardsToDeal = stock.slice(-10).map(c => ({ ...c, faceUp: true }));
@@ -348,44 +355,93 @@ export const useSpider = ({ theme, suitCount }: UseSpiderProps) => {
     };
 
     const findAllHints = useCallback((): HintState[] => {
-        const hints: { type: 'card'; cardId: number }[] = [];
+        const hints: { hint: HintState; priority: number }[] = [];
         const hintedCardIds = new Set<number>();
-        const addHint = (card: CardType, isPriority: boolean) => {
-            if (!hintedCardIds.has(card.id)) {
-                const hint = { type: 'card' as const, cardId: card.id };
-                if (isPriority) hints.unshift(hint);
-                else hints.push(hint);
-                hintedCardIds.add(card.id);
+
+        const addHint = (cardId: number, priority: number) => {
+            if (!hintedCardIds.has(cardId)) {
+                hints.push({ hint: { type: 'card', cardId }, priority });
+                hintedCardIds.add(cardId);
             }
         };
+
+        // Find all possible moves
         for (let sourcePileIndex = 0; sourcePileIndex < tableau.length; sourcePileIndex++) {
             const sourcePile = tableau[sourcePileIndex];
             if (sourcePile.length === 0) continue;
+
             for (let cardIndex = 0; cardIndex < sourcePile.length; cardIndex++) {
                 if (!sourcePile[cardIndex].faceUp) continue;
-                let isValidStack = true;
-                for (let i = cardIndex; i < sourcePile.length - 1; i++) {
-                    if (RANK_VALUE_MAP[sourcePile[i+1].rank] !== RANK_VALUE_MAP[sourcePile[i].rank] - 1 || sourcePile[i+1].suit !== sourcePile[i].suit) {
-                        isValidStack = false;
+                
+                const stackToMove = sourcePile.slice(cardIndex);
+                let isDraggableStack = true;
+                for (let i = 0; i < stackToMove.length - 1; i++) {
+                    if (stackToMove[i].suit !== stackToMove[i+1].suit || RANK_VALUE_MAP[stackToMove[i+1].rank] !== RANK_VALUE_MAP[stackToMove[i].rank] - 1) {
+                        isDraggableStack = false;
                         break;
                     }
                 }
-                if (isValidStack) {
-                    const cardToMove = sourcePile[cardIndex];
-                    for (let destPileIndex = 0; destPileIndex < tableau.length; destPileIndex++) {
-                        if (sourcePileIndex === destPileIndex) continue;
-                        const destPile = tableau[destPileIndex];
-                        const topDestCard = destPile[destPile.length - 1];
-                        if (!topDestCard || RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1) {
-                            const isPriority = cardIndex > 0 && !sourcePile[cardIndex - 1].faceUp;
-                            addHint(cardToMove, isPriority);
+                if (!isDraggableStack) continue; // Only suggest moving valid stacks
+
+                const cardToMove = stackToMove[0];
+                for (let destPileIndex = 0; destPileIndex < tableau.length; destPileIndex++) {
+                    if (sourcePileIndex === destPileIndex) continue;
+                    const destPile = tableau[destPileIndex];
+                    const topDestCard = destPile[destPile.length - 1];
+
+                    if (!topDestCard || RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[topDestCard.rank] - 1) {
+                        const uncoversCard = cardIndex > 0 && !sourcePile[cardIndex - 1].faceUp;
+                        const createsEmptyPile = sourcePile.length === stackToMove.length;
+                        
+                        let isBreakingSequence = false;
+                        if (cardIndex > 0) {
+                            const cardUnderneath = sourcePile[cardIndex - 1];
+                            if (cardUnderneath.faceUp && cardUnderneath.suit === cardToMove.suit && RANK_VALUE_MAP[cardToMove.rank] === RANK_VALUE_MAP[cardUnderneath.rank] - 1) {
+                                isBreakingSequence = true;
+                            }
                         }
+
+                        const increasesSequence = topDestCard && topDestCard.suit === cardToMove.suit;
+
+                        let priority = 4; // Default
+                        if (uncoversCard) priority = 0;
+                        else if (createsEmptyPile) priority = 1;
+                        else if (increasesSequence && !isBreakingSequence) priority = 2;
+                        else if (increasesSequence && isBreakingSequence) priority = 3;
+                        else if (isBreakingSequence) priority = 5; // De-prioritize breaking sequences
+
+                        addHint(cardToMove.id, priority);
                     }
                 }
             }
         }
-        if (hints.length > 0) return hints;
-        if (stock.length > 0 && !tableau.some(p => p.length === 0)) return [{ type: 'stock' }];
+
+        const sortedGoodHints = hints
+            .filter(h => h.priority < 5)
+            .sort((a, b) => a.priority - b.priority);
+
+        let finalHints: HintState[] = sortedGoodHints
+            .map(item => item.hint!)
+            .filter((hint, index, self) => 
+                index === self.findIndex(t => t.type === 'card' && hint.type === 'card' && t.cardId === hint.cardId)
+            );
+        
+        if (finalHints.length === 0 && hints.length > 0) {
+            const lastResortHints = hints
+                .sort((a, b) => a.priority - b.priority)
+                .map(item => item.hint!)
+                .filter((hint, index, self) => 
+                    index === self.findIndex(t => t.type === 'card' && hint.type === 'card' && t.cardId === hint.cardId)
+                );
+            if (lastResortHints.length > 0) finalHints = [lastResortHints[0]];
+        }
+
+        if (finalHints.length > 0) return finalHints;
+        
+        if (stock.length > 0 && !tableau.some(p => p.length === 0)) {
+            return [{ type: 'stock' }];
+        }
+
         return [];
     }, [tableau, stock]);
 
