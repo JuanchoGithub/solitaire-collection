@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="20" fill="#166534"/>
+  <g transform="translate(50 50) scale(0.6)">
+    <text x="-25" y="-10" font-size="50" fill="#ef4444" font-family="serif">♥</text>
+    <text x="25" y="-10" font-size="50" fill="#ef4444" font-family="serif" transform="translate(-5, 0)">♦</text>
+    <text x="-25" y="40" font-size="50" fill="white" font-family="serif">♣</text>
+    <text x="25" y="40" font-size="50" fill="white" font-family="serif">♠</text>
+  </g>
+</svg>

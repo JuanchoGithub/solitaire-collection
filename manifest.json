@@ -1,0 +1,21 @@
+{
+  "short_name": "Vibe Solitaire",
+  "name": "Vibe-solitaire",
+  "description": "A classic Solitaire card game built with a reusable card game engine structure in React. Features smooth animations and a clean, responsive interface. Includes Spider, Freecell, Klondike and others.",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#166534",
+  "background_color": "#166534"
+}
